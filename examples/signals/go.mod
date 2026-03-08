@@ -1,4 +1,4 @@
-module github.com/gogpu/ui/examples/hello
+module github.com/gogpu/ui/examples/signals
 
 go 1.25.0
 
