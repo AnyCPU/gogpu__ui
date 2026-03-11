@@ -93,6 +93,16 @@ func newWindow(
 		}
 	})
 
+	// Wire scheduler to wake render loop when signals change.
+	if wp != nil {
+		scheduler.SetOnDirty(func() {
+			w.needsLayout = true
+			if w.wp != nil {
+				w.wp.RequestRedraw()
+			}
+		})
+	}
+
 	return w
 }
 
@@ -198,8 +208,14 @@ func (w *Window) Frame() {
 	// Reset cursor for this frame.
 	w.ctx.ResetCursor()
 
-	// Flush any pending state changes.
-	w.scheduler.Flush()
+	// Flush pending signal changes (may trigger new dirty marks).
+	const maxReflushes = 2
+	for i := 0; i <= maxReflushes; i++ {
+		w.scheduler.Flush()
+		if w.scheduler.PendingCount() == 0 {
+			break
+		}
+	}
 
 	// Update scale factor (may change between frames on multi-monitor setups).
 	w.updateScale()

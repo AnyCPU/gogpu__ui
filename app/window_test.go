@@ -6,6 +6,7 @@ import (
 	"github.com/gogpu/gpucontext"
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/state"
 	"github.com/gogpu/ui/theme"
 	"github.com/gogpu/ui/widget"
 )
@@ -349,6 +350,36 @@ func TestWindow_SizeFromProvider_Updates(t *testing.T) {
 	size := w.WindowSize()
 	if size.Width != 1024 || size.Height != 768 {
 		t.Errorf("size = %v, want (1024, 768)", size)
+	}
+}
+
+func TestWindow_FrameReflush(t *testing.T) {
+	// Verify that Frame's reflush loop drains widgets that are
+	// re-dirtied during the flush callback.
+	root := newMockWidget()
+	reflushes := 0
+
+	var sched *state.Scheduler
+	sched = state.NewScheduler(func(_ []widget.Widget) {
+		reflushes++
+		// Re-dirty on the first flush to exercise the reflush loop.
+		if reflushes == 1 {
+			sched.MarkDirty(root)
+		}
+	})
+
+	wp := &mockWindowProvider{width: 400, height: 300, scale: 1.0}
+	w := newWindow(wp, nil, sched, theme.DefaultLight())
+	w.SetRoot(root)
+
+	sched.MarkDirty(root)
+	w.Frame()
+
+	if sched.PendingCount() != 0 {
+		t.Errorf("pending count after Frame = %d, want 0", sched.PendingCount())
+	}
+	if reflushes < 2 {
+		t.Errorf("reflushes = %d, want >= 2", reflushes)
 	}
 }
 
