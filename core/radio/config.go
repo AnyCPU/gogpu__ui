@@ -6,16 +6,17 @@ import (
 
 // groupConfig holds the group's configuration, set at construction time via options.
 type groupConfig struct {
-	onChange       func(value string)
-	selected       string
-	selectedSignal state.Signal[string]
-	direction      Direction
-	disabled       bool
-	disabledFn     func() bool
-	disabledSignal state.Signal[bool]
-	a11yLabel      string
-	painter        Painter
-	items          []ItemDef
+	onChange            func(value string)
+	selected            string
+	selectedSignal      state.Signal[string]
+	direction           Direction
+	disabled            bool
+	disabledFn          func() bool
+	disabledSignal      state.Signal[bool]
+	readonlyDisabledSig state.ReadonlySignal[bool]
+	a11yLabel           string
+	painter             Painter
+	items               []ItemDef
 }
 
 // ResolvedSelected returns the current selected value.
@@ -28,8 +29,11 @@ func (c *groupConfig) ResolvedSelected() string {
 }
 
 // ResolvedDisabled returns the current disabled state.
-// Priority: Signal > Fn > Static.
+// Priority: ReadonlySignal > Signal > Fn > Static.
 func (c *groupConfig) ResolvedDisabled() bool {
+	if c.readonlyDisabledSig != nil {
+		return c.readonlyDisabledSig.Get()
+	}
 	if c.disabledSignal != nil {
 		return c.disabledSignal.Get()
 	}

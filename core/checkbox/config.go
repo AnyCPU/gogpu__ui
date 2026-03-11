@@ -7,26 +7,31 @@ import (
 
 // config holds the checkbox's configuration, set at construction time via options.
 type config struct {
-	label          string
-	labelFn        func() string
-	labelSignal    state.Signal[string]
-	checked        bool
-	checkedFn      func() bool
-	checkedSignal  state.Signal[bool]
-	onToggle       func(checked bool)
-	disabled       bool
-	disabledFn     func() bool
-	disabledSignal state.Signal[bool]
-	indeterminate  bool
-	a11yHint       string
+	label               string
+	labelFn             func() string
+	labelSignal         state.Signal[string]
+	readonlyLabelSig    state.ReadonlySignal[string]
+	checked             bool
+	checkedFn           func() bool
+	checkedSignal       state.Signal[bool]
+	onToggle            func(checked bool)
+	disabled            bool
+	disabledFn          func() bool
+	disabledSignal      state.Signal[bool]
+	readonlyDisabledSig state.ReadonlySignal[bool]
+	indeterminate       bool
+	a11yHint            string
 	// styling overrides (nil/zero means use defaults)
 	background *widget.Color
 	painter    Painter
 }
 
 // ResolvedLabel returns the current display label.
-// Priority: Signal > Fn > Static.
+// Priority: ReadonlySignal > Signal > Fn > Static.
 func (c *config) ResolvedLabel() string {
+	if c.readonlyLabelSig != nil {
+		return c.readonlyLabelSig.Get()
+	}
 	if c.labelSignal != nil {
 		return c.labelSignal.Get()
 	}
@@ -49,8 +54,11 @@ func (c *config) ResolvedChecked() bool {
 }
 
 // ResolvedDisabled returns the current disabled state.
-// Priority: Signal > Fn > Static.
+// Priority: ReadonlySignal > Signal > Fn > Static.
 func (c *config) ResolvedDisabled() bool {
+	if c.readonlyDisabledSig != nil {
+		return c.readonlyDisabledSig.Get()
+	}
 	if c.disabledSignal != nil {
 		return c.disabledSignal.Get()
 	}

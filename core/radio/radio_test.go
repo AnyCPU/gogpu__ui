@@ -1175,3 +1175,31 @@ func TestGroupUnmount_CleansBindings(t *testing.T) {
 		t.Error("signal change after unmount should not mark widget dirty")
 	}
 }
+
+func TestGroupMount_ReadonlyDisabledSignal(t *testing.T) {
+	flag := state.NewSignal(true)
+	computed := state.NewComputed(func() bool {
+		return flag.Get()
+	}, flag)
+
+	rg := radio.NewGroup(
+		radio.Items(
+			radio.ItemDef{Value: "a", Label: "Alpha"},
+		),
+		radio.GroupDisabledReadonlySignal(computed),
+	)
+
+	dirtyCount := 0
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	rg.Mount(ctx)
+	sched.SetOnDirty(func() { dirtyCount++ })
+
+	flag.Set(false)
+
+	if dirtyCount == 0 {
+		t.Error("computed signal dependency change should mark widget dirty after mount")
+	}
+}

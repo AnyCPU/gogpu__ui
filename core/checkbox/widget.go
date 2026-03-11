@@ -136,11 +136,17 @@ func (w *Widget) Mount(ctx widget.Context) {
 		b := state.BindToScheduler(w.cfg.checkedSignal, w, sched)
 		w.AddBinding(b)
 	}
-	if w.cfg.labelSignal != nil {
+	if w.cfg.readonlyLabelSig != nil {
+		b := state.BindToScheduler(w.cfg.readonlyLabelSig, w, sched)
+		w.AddBinding(b)
+	} else if w.cfg.labelSignal != nil {
 		b := state.BindToScheduler(w.cfg.labelSignal, w, sched)
 		w.AddBinding(b)
 	}
-	if w.cfg.disabledSignal != nil {
+	if w.cfg.readonlyDisabledSig != nil {
+		b := state.BindToScheduler(w.cfg.readonlyDisabledSig, w, sched)
+		w.AddBinding(b)
+	} else if w.cfg.disabledSignal != nil {
 		b := state.BindToScheduler(w.cfg.disabledSignal, w, sched)
 		w.AddBinding(b)
 	}

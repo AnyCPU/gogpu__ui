@@ -7,16 +7,18 @@ import (
 
 // config holds the button's configuration, set at construction time via options.
 type config struct {
-	text           string
-	textFn         func() string
-	textSignal     state.Signal[string]
-	onClick        func()
-	disabled       bool
-	disabledFn     func() bool
-	disabledSignal state.Signal[bool]
-	variant        Variant
-	size           Size
-	a11yHint       string
+	text                   string
+	textFn                 func() string
+	textSignal             state.Signal[string]
+	readonlyTextSignal     state.ReadonlySignal[string]
+	onClick                func()
+	disabled               bool
+	disabledFn             func() bool
+	disabledSignal         state.Signal[bool]
+	readonlyDisabledSignal state.ReadonlySignal[bool]
+	variant                Variant
+	size                   Size
+	a11yHint               string
 	// styling overrides (nil/zero means use defaults)
 	background *widget.Color
 	rounded    *float32
@@ -24,8 +26,11 @@ type config struct {
 }
 
 // ResolvedText returns the current display text.
-// Priority: Signal > Fn > Static.
+// Priority: ReadonlySignal > Signal > Fn > Static.
 func (c *config) ResolvedText() string {
+	if c.readonlyTextSignal != nil {
+		return c.readonlyTextSignal.Get()
+	}
 	if c.textSignal != nil {
 		return c.textSignal.Get()
 	}
@@ -36,8 +41,11 @@ func (c *config) ResolvedText() string {
 }
 
 // ResolvedDisabled returns the current disabled state.
-// Priority: Signal > Fn > Static.
+// Priority: ReadonlySignal > Signal > Fn > Static.
 func (c *config) ResolvedDisabled() bool {
+	if c.readonlyDisabledSignal != nil {
+		return c.readonlyDisabledSignal.Get()
+	}
 	if c.disabledSignal != nil {
 		return c.disabledSignal.Get()
 	}

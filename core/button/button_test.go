@@ -675,3 +675,52 @@ func TestMount_NoSignals_NoPanic(t *testing.T) {
 	// Should not panic with no signals.
 	btn.Mount(ctx)
 }
+
+func TestMount_ReadonlySignal_CreatesBinding(t *testing.T) {
+	base := state.NewSignal("hello")
+	computed := state.NewComputed(func() string {
+		return "computed:" + base.Get()
+	}, base)
+
+	btn := button.New(button.TextReadonlySignal(computed))
+
+	dirtyCount := 0
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	btn.Mount(ctx)
+	sched.SetOnDirty(func() { dirtyCount++ })
+
+	base.Set("world")
+
+	if dirtyCount == 0 {
+		t.Error("computed signal dependency change should mark widget dirty after mount")
+	}
+}
+
+func TestNew_WithTextReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() string { return "Computed Text" })
+	btn := button.New(button.TextReadonlySignal(computed))
+	btn.SetBounds(geometry.NewRect(0, 0, 200, 40))
+	ctx := widget.NewContext()
+	canvas := &recordingCanvas{}
+
+	btn.Draw(ctx, canvas)
+
+	if len(canvas.drawTexts) == 0 {
+		t.Fatal("should have drawn text")
+	}
+	if canvas.drawTexts[0].text != "Computed Text" {
+		t.Errorf("text = %q, want %q", canvas.drawTexts[0].text, "Computed Text")
+	}
+}
+
+func TestNew_WithDisabledReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() bool { return true })
+	btn := button.New(button.DisabledReadonlySignal(computed))
+
+	if btn.IsFocusable() {
+		t.Error("disabled button (via readonly signal) should not be focusable")
+	}
+}

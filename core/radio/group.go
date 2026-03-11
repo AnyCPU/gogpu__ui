@@ -333,7 +333,10 @@ func (g *Group) Mount(ctx widget.Context) {
 		b := state.BindToScheduler(g.cfg.selectedSignal, g, sched)
 		g.AddBinding(b)
 	}
-	if g.cfg.disabledSignal != nil {
+	if g.cfg.readonlyDisabledSig != nil {
+		b := state.BindToScheduler(g.cfg.readonlyDisabledSig, g, sched)
+		g.AddBinding(b)
+	} else if g.cfg.disabledSignal != nil {
 		b := state.BindToScheduler(g.cfg.disabledSignal, g, sched)
 		g.AddBinding(b)
 	}

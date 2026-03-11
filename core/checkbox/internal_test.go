@@ -1364,3 +1364,35 @@ func TestCheckboxCheckedSignal_OnToggleStillFires(t *testing.T) {
 		t.Error("signal should be true after toggle")
 	}
 }
+
+// --- ReadonlySignal Tests ---
+
+func TestConfig_ResolvedLabel_ReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() string { return "computed label" })
+
+	c := config{
+		label:            "static",
+		labelFn:          func() string { return "fn" },
+		labelSignal:      state.NewSignal("signal"),
+		readonlyLabelSig: computed,
+	}
+
+	if got := c.ResolvedLabel(); got != "computed label" {
+		t.Errorf("ResolvedLabel() = %q, want %q", got, "computed label")
+	}
+}
+
+func TestConfig_ResolvedDisabled_ReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() bool { return true })
+
+	c := config{
+		disabled:            false,
+		disabledFn:          func() bool { return false },
+		disabledSignal:      state.NewSignal(false),
+		readonlyDisabledSig: computed,
+	}
+
+	if !c.ResolvedDisabled() {
+		t.Error("ResolvedDisabled() should be true (readonly computed signal)")
+	}
+}

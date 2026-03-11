@@ -831,3 +831,52 @@ func TestUnmount_CleansBindings(t *testing.T) {
 		t.Error("signal change after unmount should not mark widget dirty")
 	}
 }
+
+func TestMount_ReadonlySignal_CreatesBinding(t *testing.T) {
+	base := state.NewSignal("initial")
+	computed := state.NewComputed(func() string {
+		return "label:" + base.Get()
+	}, base)
+
+	cb := checkbox.New(checkbox.LabelReadonlySignal(computed))
+
+	dirtyCount := 0
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	cb.Mount(ctx)
+	sched.SetOnDirty(func() { dirtyCount++ })
+
+	base.Set("updated")
+
+	if dirtyCount == 0 {
+		t.Error("computed signal dependency change should mark widget dirty after mount")
+	}
+}
+
+func TestNew_WithLabelReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() string { return "Computed Label" })
+	cb := checkbox.New(checkbox.LabelReadonlySignal(computed))
+	cb.SetBounds(geometry.NewRect(0, 0, 200, 40))
+	ctx := widget.NewContext()
+	canvas := &recordingCanvas{}
+
+	cb.Draw(ctx, canvas)
+
+	if len(canvas.drawTexts) == 0 {
+		t.Fatal("should have drawn text")
+	}
+	if canvas.drawTexts[0].text != "Computed Label" {
+		t.Errorf("label = %q, want %q", canvas.drawTexts[0].text, "Computed Label")
+	}
+}
+
+func TestNew_WithDisabledReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() bool { return true })
+	cb := checkbox.New(checkbox.DisabledReadonlySignal(computed))
+
+	if cb.IsFocusable() {
+		t.Error("disabled checkbox (via readonly signal) should not be focusable")
+	}
+}
