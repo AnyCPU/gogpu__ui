@@ -49,16 +49,31 @@
 
 ## Quick Start
 
+> **Important:** The gogpu ecosystem is **pure Go with zero CGO**. You must set `CGO_ENABLED=0` (the Go default) — do **not** enable CGO.
+
+The fastest way to get started is to clone and run one of the included examples:
+
+```bash
+git clone https://github.com/gogpu/ui.git
+cd ui/examples/hello
+go run .
+```
+
+Here is a minimal example showing the widget toolkit:
+
 ```go
 package main
 
 import (
-    "fmt"
+    "log"
 
+    "github.com/gogpu/gg"
+    _ "github.com/gogpu/gg/gpu"
+    "github.com/gogpu/gg/integration/ggcanvas"
     "github.com/gogpu/gogpu"
     "github.com/gogpu/ui/app"
     "github.com/gogpu/ui/primitives"
-    "github.com/gogpu/ui/state"
+    "github.com/gogpu/ui/render"
     "github.com/gogpu/ui/widget"
 )
 
@@ -71,28 +86,47 @@ func main() {
     uiApp := app.New(
         app.WithWindowProvider(gogpuApp),
         app.WithPlatformProvider(gogpuApp),
+        app.WithEventSource(gogpuApp.EventSource()),
     )
-
-    // Reactive state
-    count := state.NewSignal(0)
 
     uiApp.SetRoot(
         primitives.Box(
             primitives.Text("Hello gogpu/ui!").
-                FontSize(24).
-                Bold().
+                FontSize(24).Bold().
                 Color(widget.RGBA8(33, 33, 33, 255)),
-
-            primitives.TextFn(func() string {
-                return fmt.Sprintf("Count: %d", count.Get())
-            }).FontSize(18),
-
-            primitives.Box().
-                Width(200).Height(40).
-                Background(widget.RGBA8(98, 0, 238, 255)).
-                Rounded(8),
+            primitives.Text("Enterprise-grade GUI for Go").
+                FontSize(16).
+                Color(widget.RGBA8(100, 100, 100, 255)),
         ).Padding(24).Gap(12).Background(widget.RGBA8(255, 255, 255, 255)),
     )
+
+    var canvas *ggcanvas.Canvas
+    gogpuApp.OnDraw(func(dc *gogpu.Context) {
+        w, h := dc.Width(), dc.Height()
+        if canvas == nil {
+            var err error
+            canvas, err = ggcanvas.New(gogpuApp.GPUContextProvider(), w, h)
+            if err != nil {
+                log.Fatal(err)
+            }
+        }
+        uiApp.Frame()
+        sv := dc.SurfaceView()
+        sw, sh := dc.SurfaceSize()
+        gg.SetAcceleratorSurfaceTarget(sv, sw, sh)
+        canvas.Draw(func(cc *gg.Context) {
+            cc.SetRGBA(0.94, 0.94, 0.94, 1)
+            cc.DrawRectangle(0, 0, float64(w), float64(h))
+            cc.Fill()
+            uiApp.Window().DrawTo(render.NewCanvas(cc, w, h))
+        })
+        _ = canvas.RenderDirect(sv, sw, sh)
+    })
+    gogpuApp.OnClose(func() { gg.CloseAccelerator() })
+
+    if err := gogpuApp.Run(); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
@@ -407,16 +441,25 @@ testApp.Window().Frame()  // processes layout + draw
 | Dependency | Purpose | Status |
 |------------|---------|--------|
 | Go 1.25+ | Language runtime | Required |
+| CGO_ENABLED=0 | Pure Go (no C compiler needed) | Default |
+| [gogpu/gogpu](https://github.com/gogpu/gogpu) | Windowing, input, GPU surface | For examples |
 | [gogpu/gg](https://github.com/gogpu/gg) | 2D graphics rendering | Integrated |
 | [gogpu/gpucontext](https://github.com/gogpu/gpucontext) | Shared interfaces | Integrated |
 | [coregx/signals](https://github.com/coregx/signals) | Reactive state management | Integrated |
+
+> **Note:** The entire ecosystem is pure Go. Do **not** set `CGO_ENABLED=1` — this will cause build errors from the `goffi` package which requires CGO to be disabled.
 
 ---
 
 ## Installation
 
 ```bash
+# UI toolkit (library)
 go get github.com/gogpu/ui@latest
+
+# For runnable applications you also need gogpu (windowing) and gg (rendering):
+go get github.com/gogpu/gogpu@latest
+go get github.com/gogpu/gg@latest
 ```
 
 ---
