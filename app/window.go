@@ -38,6 +38,17 @@ type Window struct {
 	// needsLayout indicates that layout should be recalculated.
 	needsLayout bool
 
+	// needsRedraw indicates that the draw pass should be performed.
+	// This is set when any widget in the tree needs re-rendering,
+	// and cleared after a successful draw. When false, DrawTo can
+	// skip rendering entirely because the previous frame's output
+	// is still valid in the GPU framebuffer.
+	needsRedraw bool
+
+	// lastDrawStats holds per-widget statistics from the most recent
+	// draw traversal. Updated by DrawTo() and the headless draw() path.
+	lastDrawStats widget.DrawStats
+
 	// windowSize tracks the last known window size in physical pixels.
 	windowSize geometry.Size
 
@@ -66,6 +77,7 @@ func newWindow(
 	// Initialize overlay stack.
 	w.overlays = overlay.NewStack(func() {
 		w.needsLayout = true
+		w.needsRedraw = true
 		if w.wp != nil {
 			w.wp.RequestRedraw()
 		}
@@ -91,6 +103,10 @@ func newWindow(
 	// Wire invalidation callback to request redraw.
 	ctx.SetOnInvalidate(func() {
 		w.needsLayout = true
+		w.needsRedraw = true
+		if w.root != nil {
+			widget.MarkRedrawInTree(w.root)
+		}
 		if w.wp != nil {
 			w.wp.RequestRedraw()
 		}
@@ -100,6 +116,7 @@ func newWindow(
 	if wp != nil {
 		scheduler.SetOnDirty(func() {
 			w.needsLayout = true
+			w.needsRedraw = true
 			if w.wp != nil {
 				w.wp.RequestRedraw()
 			}
@@ -122,10 +139,12 @@ func (w *Window) SetRoot(root widget.Widget) {
 
 	w.root = root
 	w.needsLayout = true
+	w.needsRedraw = true
 
-	// Mount new tree.
+	// Mount new tree and mark all widgets as needing redraw.
 	if w.root != nil {
 		widget.MountTree(w.root, w.ctx)
+		widget.MarkRedrawInTree(w.root)
 	}
 }
 
@@ -149,6 +168,10 @@ func (w *Window) setTheme(t *theme.Theme) {
 	w.theme = t
 	w.ctx.SetThemeProvider(t)
 	w.needsLayout = true
+	w.needsRedraw = true
+	if w.root != nil {
+		widget.MarkRedrawInTree(w.root)
+	}
 }
 
 // HandleEvent dispatches a single event to the widget tree.
@@ -179,6 +202,10 @@ func (w *Window) HandleEvent(e event.Event) {
 func (w *Window) HandleResize(width, height int) {
 	w.windowSize = geometry.Sz(float32(width), float32(height))
 	w.needsLayout = true
+	w.needsRedraw = true
+	if w.root != nil {
+		widget.MarkRedrawInTree(w.root)
+	}
 }
 
 // HandleFocusChange processes a window focus change.
@@ -224,6 +251,7 @@ func (w *Window) Frame() {
 	w.ctx.ResetCursor()
 
 	// Flush pending signal changes (may trigger new dirty marks).
+	// The scheduler's flushFn sets persistent needsRedraw flags on widgets.
 	const maxReflushes = 2
 	for i := 0; i <= maxReflushes; i++ {
 		w.scheduler.Flush()
@@ -239,17 +267,32 @@ func (w *Window) Frame() {
 	w.updateWindowSize()
 
 	// Perform layout if needed.
+	// Layout changes always require a redraw since widget positions may shift.
 	var layoutDur time.Duration
 	if w.needsLayout {
 		layoutStart := time.Now()
 		w.layout()
 		layoutDur = time.Since(layoutStart)
 		w.needsLayout = false
+		// Layout changes require full redraw since positions may have shifted.
+		w.needsRedraw = true
+		widget.MarkRedrawInTree(w.root)
 	}
 
-	// Draw the widget tree.
+	// Determine if any widget in the tree needs redraw.
+	// This check is O(n) in the worst case but short-circuits on first dirty widget.
+	if !w.needsRedraw {
+		w.needsRedraw = widget.NeedsRedrawInTree(w.root)
+	}
+
+	// Draw the widget tree (headless mode draw).
 	drawStart := time.Now()
-	w.draw()
+	drawSkipped := !w.needsRedraw
+	if w.needsRedraw {
+		w.draw()
+		// DrawTree (called by draw()) already clears redraw flags on each widget.
+		w.needsRedraw = false
+	}
 	drawDur := time.Since(drawStart)
 
 	// Sync cursor to platform.
@@ -266,6 +309,8 @@ func (w *Window) Frame() {
 			DrawDuration:    drawDur,
 			TotalDuration:   time.Since(frameStart),
 			LayoutPerformed: didLayout,
+			DrawSkipped:     drawSkipped,
+			DrawStats:       w.lastDrawStats,
 		})
 	}
 }
@@ -273,6 +318,29 @@ func (w *Window) Frame() {
 // NeedsLayout returns true if layout needs recalculation.
 func (w *Window) NeedsLayout() bool {
 	return w.needsLayout
+}
+
+// NeedsRedraw reports whether any widget in the tree needs re-rendering.
+//
+// When this returns false, the host application can skip calling [Window.DrawTo]
+// and reuse the previous frame's output from the GPU framebuffer. This is the
+// primary optimization of retained-mode rendering: idle UIs consume zero CPU
+// for rendering.
+func (w *Window) NeedsRedraw() bool {
+	if w.needsRedraw {
+		return true
+	}
+	return widget.NeedsRedrawInTree(w.root)
+}
+
+// LastDrawStats returns the per-widget statistics from the most recent
+// draw traversal (either via [Window.DrawTo] or the headless draw path
+// inside [Window.Frame]).
+//
+// When the last frame was skipped (no dirty widgets), the returned stats
+// are zero-valued.
+func (w *Window) LastDrawStats() widget.DrawStats {
+	return w.lastDrawStats
 }
 
 // WindowSize returns the current window size in logical pixels.
@@ -304,20 +372,17 @@ func (w *Window) layout() {
 	w.overlays.Layout(w.ctx, w.windowSize)
 }
 
-// draw performs the draw pass on the widget tree.
+// draw performs the draw pass on the widget tree in headless mode.
 func (w *Window) draw() {
 	if w.root == nil {
 		return
 	}
 
-	// Draw uses a nil canvas in headless mode.
-	// In real usage, the host application provides the canvas through
-	// a different mechanism (e.g., gg.Context wrapped in render.Canvas).
-	// For now, we call Draw with a nil canvas which widgets should handle
-	// gracefully, or the host provides one via DrawTo.
-	//
-	// TODO: Integrate with internal/render.Canvas when the full pipeline
-	// is connected through gpucontext.
+	// Headless mode: no canvas available, so we collect statistics and
+	// clear redraw flags without actually calling Draw on widgets.
+	// Real rendering happens via DrawTo() when the host provides a canvas.
+	w.lastDrawStats = widget.CollectDrawStats(w.root)
+	widget.ClearRedrawInTree(w.root)
 }
 
 // DrawTo performs the draw pass using the provided canvas.
@@ -325,15 +390,38 @@ func (w *Window) draw() {
 // This method is called by the host application when it has a canvas
 // ready for drawing. It draws the root widget tree and then all overlays
 // on top.
-func (w *Window) DrawTo(canvas widget.Canvas) {
+//
+// With retained-mode rendering, DrawTo checks whether any widget in the
+// tree actually needs re-rendering. If not, it returns false to indicate
+// that the host application can skip uploading the canvas to the GPU
+// (the previous frame's output is still valid).
+//
+// Returns true if rendering was performed, false if the draw was skipped
+// because no widgets changed since the last draw.
+func (w *Window) DrawTo(canvas widget.Canvas) bool {
 	if w.root == nil || canvas == nil {
-		return
+		return false
 	}
 
-	w.root.Draw(w.ctx, canvas)
+	// Check if any widget needs redraw. If the tree is clean and the
+	// window-level flag is not set, skip the entire draw pass.
+	if !w.needsRedraw && !widget.NeedsRedrawInTree(w.root) {
+		return false
+	}
+
+	// Draw the widget tree, collecting per-widget statistics.
+	w.lastDrawStats = widget.DrawTree(w.root, w.ctx, canvas)
 
 	// Draw overlays on top (bottom to top).
 	w.overlays.Draw(w.ctx, canvas)
+
+	// Clear all redraw flags in the tree. DrawTree only clears the root's
+	// flag; children's flags need to be cleared recursively since the
+	// widget's Draw method handles child drawing internally.
+	widget.ClearRedrawInTree(w.root)
+	w.needsRedraw = false
+
+	return true
 }
 
 // syncCursor forwards the cursor state to the platform provider.
