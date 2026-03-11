@@ -1120,3 +1120,58 @@ func TestRadioSelectedSignal_WithOnChange(t *testing.T) {
 		t.Errorf("signal = %q, want %q", sig.Get(), "a")
 	}
 }
+
+// --- Lifecycle Tests ---
+
+func TestLifecycleInterface_Group(t *testing.T) {
+	var _ widget.Lifecycle = radio.NewGroup()
+}
+
+func TestGroupMount_CreatesBindings(t *testing.T) {
+	sig := state.NewSignal("a")
+	rg := radio.NewGroup(
+		radio.Items(
+			radio.ItemDef{Value: "a", Label: "Alpha"},
+			radio.ItemDef{Value: "b", Label: "Beta"},
+		),
+		radio.SelectedSignal(sig),
+	)
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	rg.Mount(ctx)
+
+	dirtyCount := 0
+	sched.SetOnDirty(func() { dirtyCount++ })
+	sig.Set("b")
+
+	if dirtyCount == 0 {
+		t.Error("signal change should mark widget dirty after mount")
+	}
+}
+
+func TestGroupUnmount_CleansBindings(t *testing.T) {
+	sig := state.NewSignal("a")
+	rg := radio.NewGroup(
+		radio.Items(
+			radio.ItemDef{Value: "a", Label: "Alpha"},
+		),
+		radio.SelectedSignal(sig),
+	)
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	rg.Mount(ctx)
+	rg.CleanupBindings()
+	rg.Unmount()
+
+	sig.Set("b")
+
+	if sched.PendingCount() != 0 {
+		t.Error("signal change after unmount should not mark widget dirty")
+	}
+}

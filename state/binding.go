@@ -81,7 +81,7 @@ func Bind[T any](sig ReadonlySignal[T], ctx widget.Context) *Binding {
 //	defer binding.Unbind()
 //
 //	counter.Set(1) // sched.MarkDirty(myWidget) is called
-func BindToScheduler[T any](sig ReadonlySignal[T], w widget.Widget, sched *Scheduler) *Binding {
+func BindToScheduler[T any](sig ReadonlySignal[T], w widget.Widget, sched widget.SchedulerRef) *Binding {
 	b := &Binding{active: true}
 	unsub := sig.SubscribeForever(func(_ T) {
 		sched.MarkDirty(w)

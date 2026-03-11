@@ -787,3 +787,47 @@ func TestNew_DisabledSignal_IgnoresEvents(t *testing.T) {
 		t.Error("disabled (via signal) checkbox should not toggle")
 	}
 }
+
+// --- Lifecycle Tests ---
+
+func TestLifecycleInterface(t *testing.T) {
+	var _ widget.Lifecycle = checkbox.New()
+}
+
+func TestMount_CreatesBindings(t *testing.T) {
+	sig := state.NewSignal(false)
+	cb := checkbox.New(checkbox.CheckedSignal(sig))
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	cb.Mount(ctx)
+
+	dirtyCount := 0
+	sched.SetOnDirty(func() { dirtyCount++ })
+	sig.Set(true)
+
+	if dirtyCount == 0 {
+		t.Error("signal change should mark widget dirty after mount")
+	}
+}
+
+func TestUnmount_CleansBindings(t *testing.T) {
+	sig := state.NewSignal(false)
+	cb := checkbox.New(checkbox.CheckedSignal(sig))
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	cb.Mount(ctx)
+	cb.CleanupBindings()
+	cb.Unmount()
+
+	sig.Set(true)
+
+	if sched.PendingCount() != 0 {
+		t.Error("signal change after unmount should not mark widget dirty")
+	}
+}

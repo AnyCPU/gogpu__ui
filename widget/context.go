@@ -103,6 +103,19 @@ type Context interface {
 
 	// WindowSize returns the current window size in logical pixels.
 	WindowSize() geometry.Size
+
+	// Scheduler returns the signal scheduler for this context.
+	//
+	// Returns nil if no scheduler is set (headless mode without signal support).
+	// Widgets should check for nil before using the returned scheduler.
+	Scheduler() SchedulerRef
+}
+
+// SchedulerRef is a minimal interface for the signal scheduler.
+// It is defined in the widget package to avoid circular imports
+// between widget and state packages.
+type SchedulerRef interface {
+	MarkDirty(w Widget)
 }
 
 // OverlayManager provides methods for pushing and removing overlays from the
@@ -241,6 +254,9 @@ type ContextImpl struct {
 
 	// Window size
 	windowSize geometry.Size
+
+	// Signal scheduler
+	scheduler SchedulerRef
 }
 
 // NewContext creates a new ContextImpl with default settings.
@@ -494,6 +510,22 @@ func (c *ContextImpl) SetWindowSize(size geometry.Size) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.windowSize = size
+}
+
+// Scheduler returns the signal scheduler for this context.
+//
+// Returns nil if no scheduler is set.
+func (c *ContextImpl) Scheduler() SchedulerRef {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.scheduler
+}
+
+// SetScheduler sets the signal scheduler for this context.
+func (c *ContextImpl) SetScheduler(s SchedulerRef) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.scheduler = s
 }
 
 // Verify ContextImpl implements Context.

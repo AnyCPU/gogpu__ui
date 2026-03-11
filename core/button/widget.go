@@ -3,6 +3,7 @@ package button
 import (
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/state"
 	"github.com/gogpu/ui/widget"
 )
 
@@ -140,8 +141,32 @@ func (w *Widget) Children() []widget.Widget {
 	return nil
 }
 
+// Mount creates signal bindings for push-based invalidation.
+// Implements [widget.Lifecycle].
+func (w *Widget) Mount(ctx widget.Context) {
+	sched := ctx.Scheduler()
+	if sched == nil {
+		return
+	}
+	if w.cfg.textSignal != nil {
+		b := state.BindToScheduler(w.cfg.textSignal, w, sched)
+		w.AddBinding(b)
+	}
+	if w.cfg.disabledSignal != nil {
+		b := state.BindToScheduler(w.cfg.disabledSignal, w, sched)
+		w.AddBinding(b)
+	}
+}
+
+// Unmount is called when the button is removed from the widget tree.
+// Implements [widget.Lifecycle].
+func (w *Widget) Unmount() {
+	// Bindings are cleaned up automatically by WidgetBase.CleanupBindings().
+}
+
 // Verify Widget implements required interfaces at compile time.
 var (
 	_ widget.Widget    = (*Widget)(nil)
 	_ widget.Focusable = (*Widget)(nil)
+	_ widget.Lifecycle = (*Widget)(nil)
 )

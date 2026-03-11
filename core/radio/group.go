@@ -5,6 +5,7 @@ import (
 
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/state"
 	"github.com/gogpu/ui/widget"
 )
 
@@ -321,5 +322,31 @@ func (g *Group) Children() []widget.Widget {
 	return children
 }
 
+// Mount creates signal bindings for push-based invalidation.
+// Implements [widget.Lifecycle].
+func (g *Group) Mount(ctx widget.Context) {
+	sched := ctx.Scheduler()
+	if sched == nil {
+		return
+	}
+	if g.cfg.selectedSignal != nil {
+		b := state.BindToScheduler(g.cfg.selectedSignal, g, sched)
+		g.AddBinding(b)
+	}
+	if g.cfg.disabledSignal != nil {
+		b := state.BindToScheduler(g.cfg.disabledSignal, g, sched)
+		g.AddBinding(b)
+	}
+}
+
+// Unmount is called when the radio group is removed from the widget tree.
+// Implements [widget.Lifecycle].
+func (g *Group) Unmount() {
+	// Bindings are cleaned up automatically by WidgetBase.CleanupBindings().
+}
+
 // Verify Group implements required interfaces at compile time.
-var _ widget.Widget = (*Group)(nil)
+var (
+	_ widget.Widget    = (*Group)(nil)
+	_ widget.Lifecycle = (*Group)(nil)
+)

@@ -611,3 +611,47 @@ func (tp *testThemeProvider) IsDark() bool {
 func (tp *testThemeProvider) OnSurface() widget.Color {
 	return tp.onSurface
 }
+
+// --- Lifecycle Tests ---
+
+func TestTextWidget_LifecycleInterface(t *testing.T) {
+	var _ widget.Lifecycle = primitives.Text("hello")
+}
+
+func TestTextWidget_Mount_CreatesBindings(t *testing.T) {
+	sig := state.NewSignal("hello")
+	tw := primitives.Text("").ContentSignal(sig.AsReadonly())
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	tw.Mount(ctx)
+
+	dirtyCount := 0
+	sched.SetOnDirty(func() { dirtyCount++ })
+	sig.Set("world")
+
+	if dirtyCount == 0 {
+		t.Error("signal change should mark widget dirty after mount")
+	}
+}
+
+func TestTextWidget_Unmount_CleansBindings(t *testing.T) {
+	sig := state.NewSignal("hello")
+	tw := primitives.Text("").ContentSignal(sig.AsReadonly())
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	tw.Mount(ctx)
+	tw.CleanupBindings()
+	tw.Unmount()
+
+	sig.Set("world")
+
+	if sched.PendingCount() != 0 {
+		t.Error("signal change after unmount should not mark widget dirty")
+	}
+}

@@ -350,8 +350,28 @@ func isBoundedWidth(v float32) bool {
 	return v < geometry.Infinity
 }
 
+// Mount creates signal bindings for push-based invalidation.
+// Implements [widget.Lifecycle].
+func (t *TextWidget) Mount(ctx widget.Context) {
+	sched := ctx.Scheduler()
+	if sched == nil {
+		return
+	}
+	if t.contentSignal != nil {
+		b := state.BindToScheduler(t.contentSignal, t, sched)
+		t.AddBinding(b)
+	}
+}
+
+// Unmount is called when the text widget is removed from the widget tree.
+// Implements [widget.Lifecycle].
+func (t *TextWidget) Unmount() {
+	// Bindings are cleaned up automatically by WidgetBase.CleanupBindings().
+}
+
 // Compile-time interface checks.
 var (
-	_ widget.Widget   = (*TextWidget)(nil)
-	_ a11y.Accessible = (*TextWidget)(nil)
+	_ widget.Widget    = (*TextWidget)(nil)
+	_ a11y.Accessible  = (*TextWidget)(nil)
+	_ widget.Lifecycle = (*TextWidget)(nil)
 )

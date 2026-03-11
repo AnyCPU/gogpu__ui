@@ -1081,3 +1081,47 @@ func (c *mockCanvas) PushClip(_ geometry.Rect)       {}
 func (c *mockCanvas) PopClip()                       {}
 func (c *mockCanvas) PushTransform(_ geometry.Point) {}
 func (c *mockCanvas) PopTransform()                  {}
+
+// --- Lifecycle Tests ---
+
+func TestLifecycleInterface(t *testing.T) {
+	var _ widget.Lifecycle = textfield.New()
+}
+
+func TestMount_CreatesBindings(t *testing.T) {
+	sig := state.NewSignal("hello")
+	tf := textfield.New(textfield.ValueSignal(sig))
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	tf.Mount(ctx)
+
+	dirtyCount := 0
+	sched.SetOnDirty(func() { dirtyCount++ })
+	sig.Set("world")
+
+	if dirtyCount == 0 {
+		t.Error("signal change should mark widget dirty after mount")
+	}
+}
+
+func TestUnmount_CleansBindings(t *testing.T) {
+	sig := state.NewSignal("hello")
+	tf := textfield.New(textfield.ValueSignal(sig))
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	tf.Mount(ctx)
+	tf.CleanupBindings()
+	tf.Unmount()
+
+	sig.Set("world")
+
+	if sched.PendingCount() != 0 {
+		t.Error("signal change after unmount should not mark widget dirty")
+	}
+}

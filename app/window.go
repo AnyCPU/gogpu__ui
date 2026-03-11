@@ -71,6 +71,9 @@ func newWindow(
 		}
 	})
 
+	// Set scheduler on context so widgets can bind signals on mount.
+	ctx.SetScheduler(scheduler)
+
 	// Set the theme provider on the context so widgets can access theme.
 	if t != nil {
 		ctx.SetThemeProvider(t)
@@ -109,9 +112,21 @@ func newWindow(
 // SetRoot sets the root widget for this window.
 //
 // Setting a new root triggers a full layout on the next Frame call.
+// The old root tree is unmounted and the new root tree is mounted,
+// which triggers signal binding setup/teardown via [widget.Lifecycle].
 func (w *Window) SetRoot(root widget.Widget) {
+	// Unmount old tree.
+	if w.root != nil {
+		widget.UnmountTree(w.root)
+	}
+
 	w.root = root
 	w.needsLayout = true
+
+	// Mount new tree.
+	if w.root != nil {
+		widget.MountTree(w.root, w.ctx)
+	}
 }
 
 // Root returns the current root widget, or nil if none is set.
