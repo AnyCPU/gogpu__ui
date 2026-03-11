@@ -447,7 +447,7 @@ func (m *mockCanvas) PopTransform()                                             
 
 // --- Retained-mode rendering tests ---
 
-func TestWindow_DrawTo_SkipsWhenClean(t *testing.T) {
+func TestWindow_DrawTo_ReportsCleanTree(t *testing.T) {
 	a := New()
 	w := a.Window()
 	root := newMockWidget()
@@ -458,19 +458,21 @@ func TestWindow_DrawTo_SkipsWhenClean(t *testing.T) {
 	// First draw: all widgets are dirty (just mounted).
 	drawn := w.DrawTo(canvas)
 	if !drawn {
-		t.Error("first DrawTo should render (all widgets dirty after mount)")
+		t.Error("first DrawTo should report dirty (all widgets dirty after mount)")
 	}
 
 	// Reset tracking.
 	root.drawCalled = false
 
-	// Second draw: nothing changed, should be skipped.
+	// Second draw: nothing changed. In Sub-Phase 1, DrawTo still draws
+	// (existing widgets don't self-dirty on event state changes yet),
+	// but returns false to indicate the tree was clean.
 	drawn = w.DrawTo(canvas)
 	if drawn {
-		t.Error("second DrawTo should skip (no widgets dirty)")
+		t.Error("second DrawTo should report clean (no widgets dirty)")
 	}
-	if root.drawCalled {
-		t.Error("root Draw should not be called when draw is skipped")
+	if !root.drawCalled {
+		t.Error("root Draw should still be called (Sub-Phase 1 always draws)")
 	}
 }
 

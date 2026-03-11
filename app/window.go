@@ -1,9 +1,12 @@
 package app
 
 import (
+	"context"
+	"log/slog"
 	"time"
 
 	"github.com/gogpu/gpucontext"
+	ui "github.com/gogpu/ui"
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/overlay"
@@ -285,12 +288,15 @@ func (w *Window) Frame() {
 		w.needsRedraw = widget.NeedsRedrawInTree(w.root)
 	}
 
-	// Draw the widget tree (headless mode draw).
+	// Draw the widget tree.
+	// In hosted mode (wp != nil), DrawTo() is called later by the host
+	// application with a real canvas — so we must NOT clear redraw flags here.
+	// In headless mode (wp == nil), there is no DrawTo() call, so we collect
+	// stats and clear flags ourselves.
 	drawStart := time.Now()
 	drawSkipped := !w.needsRedraw
-	if w.needsRedraw {
+	if w.needsRedraw && w.wp == nil {
 		w.draw()
-		// DrawTree (called by draw()) already clears redraw flags on each widget.
 		w.needsRedraw = false
 	}
 	drawDur := time.Since(drawStart)
@@ -403,11 +409,14 @@ func (w *Window) DrawTo(canvas widget.Canvas) bool {
 		return false
 	}
 
-	// Check if any widget needs redraw. If the tree is clean and the
-	// window-level flag is not set, skip the entire draw pass.
-	if !w.needsRedraw && !widget.NeedsRedrawInTree(w.root) {
-		return false
-	}
+	// Collect dirty/clean statistics before drawing.
+	// In Sub-Phase 1 we always draw (existing widgets don't self-dirty on
+	// event-driven state changes yet). The stats provide observability for
+	// monitoring and for validating the dirty-tracking system.
+	//
+	// Sub-Phase 2 will add per-widget self-dirtying + pixel caching, at which
+	// point clean subtrees can be composited from cache instead of re-drawn.
+	treeClean := !w.needsRedraw && !widget.NeedsRedrawInTree(w.root)
 
 	// Draw the widget tree, collecting per-widget statistics.
 	w.lastDrawStats = widget.DrawTree(w.root, w.ctx, canvas)
@@ -415,13 +424,21 @@ func (w *Window) DrawTo(canvas widget.Canvas) bool {
 	// Draw overlays on top (bottom to top).
 	w.overlays.Draw(w.ctx, canvas)
 
-	// Clear all redraw flags in the tree. DrawTree only clears the root's
-	// flag; children's flags need to be cleared recursively since the
-	// widget's Draw method handles child drawing internally.
+	// Clear all redraw flags in the tree after successful draw.
 	widget.ClearRedrawInTree(w.root)
 	w.needsRedraw = false
 
-	return true
+	if treeClean {
+		ui.Logger().LogAttrs(context.Background(), slog.LevelDebug, "DrawTo: tree was clean (could skip in Phase 2)")
+	} else {
+		ui.Logger().LogAttrs(context.Background(), slog.LevelDebug, "DrawTo: rendered",
+			slog.Int("dirty", w.lastDrawStats.DirtyWidgets),
+			slog.Int("clean", w.lastDrawStats.CleanWidgets),
+			slog.Int("total", w.lastDrawStats.TotalWidgets),
+		)
+	}
+
+	return !treeClean
 }
 
 // syncCursor forwards the cursor state to the platform provider.
