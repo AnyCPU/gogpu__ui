@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (Dependencies)
+- **gg** v0.34.0 → v0.35.1 (scene.TextRenderer GlyphCache integration)
+- **gogpu** v0.23.0 → v0.23.1 (macOS Retina CAMetalLayer fix) — examples only
+
 ### Added (Retained-Mode Rendering — TASK-UI-057 Sub-Phase 1)
 - **Draw tree traversal with statistics** — `widget.DrawTree()` draws the root widget
   and collects per-widget dirty/clean statistics via `widget.DrawStats`
