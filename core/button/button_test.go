@@ -610,3 +610,117 @@ func (c *mockCanvas) PushClip(_ geometry.Rect)       {}
 func (c *mockCanvas) PopClip()                       {}
 func (c *mockCanvas) PushTransform(_ geometry.Point) {}
 func (c *mockCanvas) PopTransform()                  {}
+
+// --- Lifecycle Tests ---
+
+func TestLifecycleInterface(t *testing.T) {
+	var _ widget.Lifecycle = button.New()
+}
+
+func TestMount_CreatesBindings(t *testing.T) {
+	sig := state.NewSignal("Hello")
+	btn := button.New(button.TextSignal(sig))
+
+	dirtyCount := 0
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	btn.Mount(ctx)
+
+	// Changing the signal should mark dirty.
+	sched.SetOnDirty(func() { dirtyCount++ })
+	sig.Set("World")
+
+	if dirtyCount == 0 {
+		t.Error("signal change should mark widget dirty after mount")
+	}
+}
+
+func TestUnmount_CleansBindings(t *testing.T) {
+	sig := state.NewSignal("Hello")
+	btn := button.New(button.TextSignal(sig))
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	btn.Mount(ctx)
+	btn.CleanupBindings()
+	btn.Unmount()
+
+	// Signal change after unmount should not mark dirty.
+	sig.Set("After Unmount")
+
+	if sched.PendingCount() != 0 {
+		t.Error("signal change after unmount should not mark widget dirty")
+	}
+}
+
+func TestMount_NoScheduler_NoPanic(t *testing.T) {
+	btn := button.New(button.TextSignal(state.NewSignal("text")))
+	ctx := widget.NewContext()
+
+	// Should not panic even without scheduler.
+	btn.Mount(ctx)
+}
+
+func TestMount_NoSignals_NoPanic(t *testing.T) {
+	btn := button.New(button.TextOpt("static"))
+
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	// Should not panic with no signals.
+	btn.Mount(ctx)
+}
+
+func TestMount_ReadonlySignal_CreatesBinding(t *testing.T) {
+	base := state.NewSignal("hello")
+	computed := state.NewComputed(func() string {
+		return "computed:" + base.Get()
+	}, base)
+
+	btn := button.New(button.TextReadonlySignal(computed))
+
+	dirtyCount := 0
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	ctx := widget.NewContext()
+	ctx.SetScheduler(sched)
+
+	btn.Mount(ctx)
+	sched.SetOnDirty(func() { dirtyCount++ })
+
+	base.Set("world")
+
+	if dirtyCount == 0 {
+		t.Error("computed signal dependency change should mark widget dirty after mount")
+	}
+}
+
+func TestNew_WithTextReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() string { return "Computed Text" })
+	btn := button.New(button.TextReadonlySignal(computed))
+	btn.SetBounds(geometry.NewRect(0, 0, 200, 40))
+	ctx := widget.NewContext()
+	canvas := &recordingCanvas{}
+
+	btn.Draw(ctx, canvas)
+
+	if len(canvas.drawTexts) == 0 {
+		t.Fatal("should have drawn text")
+	}
+	if canvas.drawTexts[0].text != "Computed Text" {
+		t.Errorf("text = %q, want %q", canvas.drawTexts[0].text, "Computed Text")
+	}
+}
+
+func TestNew_WithDisabledReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() bool { return true })
+	btn := button.New(button.DisabledReadonlySignal(computed))
+
+	if btn.IsFocusable() {
+		t.Error("disabled button (via readonly signal) should not be focusable")
+	}
+}

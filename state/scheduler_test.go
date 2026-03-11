@@ -283,6 +283,63 @@ func TestSchedulerWidgetsDuringFlush(t *testing.T) {
 	}
 }
 
+func TestSchedulerSetOnDirty(t *testing.T) {
+	var called int
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	sched.SetOnDirty(func() { called++ })
+
+	w := &mockWidget{name: "w"}
+	sched.MarkDirty(w)
+
+	if called != 1 {
+		t.Errorf("onDirty called %d times, want 1", called)
+	}
+}
+
+func TestSchedulerOnDirtyNotCalledOnSubsequent(t *testing.T) {
+	var called int
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	sched.SetOnDirty(func() { called++ })
+
+	w1 := &mockWidget{name: "w1"}
+	w2 := &mockWidget{name: "w2"}
+	w3 := &mockWidget{name: "w3"}
+
+	sched.MarkDirty(w1)
+	sched.MarkDirty(w2)
+	sched.MarkDirty(w3)
+
+	if called != 1 {
+		t.Errorf("onDirty called %d times, want 1 (only on first)", called)
+	}
+}
+
+func TestSchedulerOnDirtyAfterFlush(t *testing.T) {
+	var called int
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	sched.SetOnDirty(func() { called++ })
+
+	w := &mockWidget{name: "w"}
+
+	sched.MarkDirty(w)
+	sched.Flush()
+	sched.MarkDirty(w) // pending was empty after flush, should fire again
+
+	if called != 2 {
+		t.Errorf("onDirty called %d times, want 2", called)
+	}
+}
+
+func TestSchedulerOnDirtyNilSafe(t *testing.T) {
+	sched := state.NewScheduler(func(_ []widget.Widget) {})
+	// No SetOnDirty call — onDirty is nil.
+	w := &mockWidget{name: "w"}
+	sched.MarkDirty(w) // must not panic
+	if got := sched.PendingCount(); got != 1 {
+		t.Errorf("pending = %d, want 1", got)
+	}
+}
+
 func BenchmarkSchedulerMarkDirty(b *testing.B) {
 	sched := state.NewScheduler(func(_ []widget.Widget) {})
 	w := &mockWidget{name: "bench"}

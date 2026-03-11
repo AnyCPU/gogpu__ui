@@ -3,6 +3,7 @@ package checkbox
 import (
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/state"
 	"github.com/gogpu/ui/widget"
 )
 
@@ -124,8 +125,42 @@ func (w *Widget) Children() []widget.Widget {
 	return nil
 }
 
+// Mount creates signal bindings for push-based invalidation.
+// Implements [widget.Lifecycle].
+func (w *Widget) Mount(ctx widget.Context) {
+	sched := ctx.Scheduler()
+	if sched == nil {
+		return
+	}
+	if w.cfg.checkedSignal != nil {
+		b := state.BindToScheduler(w.cfg.checkedSignal, w, sched)
+		w.AddBinding(b)
+	}
+	if w.cfg.readonlyLabelSig != nil {
+		b := state.BindToScheduler(w.cfg.readonlyLabelSig, w, sched)
+		w.AddBinding(b)
+	} else if w.cfg.labelSignal != nil {
+		b := state.BindToScheduler(w.cfg.labelSignal, w, sched)
+		w.AddBinding(b)
+	}
+	if w.cfg.readonlyDisabledSig != nil {
+		b := state.BindToScheduler(w.cfg.readonlyDisabledSig, w, sched)
+		w.AddBinding(b)
+	} else if w.cfg.disabledSignal != nil {
+		b := state.BindToScheduler(w.cfg.disabledSignal, w, sched)
+		w.AddBinding(b)
+	}
+}
+
+// Unmount is called when the checkbox is removed from the widget tree.
+// Implements [widget.Lifecycle].
+func (w *Widget) Unmount() {
+	// Bindings are cleaned up automatically by WidgetBase.CleanupBindings().
+}
+
 // Verify Widget implements required interfaces at compile time.
 var (
 	_ widget.Widget    = (*Widget)(nil)
 	_ widget.Focusable = (*Widget)(nil)
+	_ widget.Lifecycle = (*Widget)(nil)
 )

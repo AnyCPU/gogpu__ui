@@ -6,6 +6,18 @@ import (
 	"github.com/gogpu/ui/geometry"
 )
 
+// Unbinder is implemented by signal bindings for cleanup.
+// It is defined here to avoid importing the state package from widget.
+type Unbinder interface {
+	Unbind()
+}
+
+// Stopper is implemented by effects for cleanup.
+// It is defined here to avoid importing the state package from widget.
+type Stopper interface {
+	Stop()
+}
+
 // WidgetBase provides common functionality for widgets.
 //
 // Embed this struct in custom widget implementations to get:
@@ -15,6 +27,7 @@ import (
 //   - Enabled/disabled state
 //   - Child widget management
 //   - Optional ID for debugging
+//   - Signal binding lifecycle management
 //
 // Example usage:
 //
@@ -45,6 +58,9 @@ type WidgetBase struct {
 	id       string        // Optional ID for debugging
 	children []Widget      // Child widgets
 	parent   Widget        // Parent widget (if any)
+	bindings []Unbinder    // Signal bindings (cleaned up on unmount)
+	effects  []Stopper     // Effects (stopped on unmount)
+	mounted  bool          // Whether widget is currently mounted
 }
 
 // NewWidgetBase creates a new WidgetBase with default settings.
@@ -333,4 +349,57 @@ func (w *WidgetBase) GlobalToLocal(p geometry.Point) geometry.Point {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	return p.Sub(w.bounds.Min)
+}
+
+// IsMounted reports whether the widget is currently in the mounted tree.
+func (w *WidgetBase) IsMounted() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.mounted
+}
+
+// SetMounted sets the widget's mounted state.
+// This is called by the framework during mount/unmount tree walks.
+func (w *WidgetBase) SetMounted(m bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.mounted = m
+}
+
+// AddBinding registers a signal binding for automatic cleanup on unmount.
+func (w *WidgetBase) AddBinding(b Unbinder) {
+	if b == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.bindings = append(w.bindings, b)
+}
+
+// AddEffect registers an effect for automatic cleanup on unmount.
+func (w *WidgetBase) AddEffect(e Stopper) {
+	if e == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.effects = append(w.effects, e)
+}
+
+// CleanupBindings unbinds all signal bindings and stops all effects.
+// Called automatically by the framework before Unmount().
+func (w *WidgetBase) CleanupBindings() {
+	w.mu.Lock()
+	bindings := w.bindings
+	effects := w.effects
+	w.bindings = nil
+	w.effects = nil
+	w.mu.Unlock()
+
+	for _, b := range bindings {
+		b.Unbind()
+	}
+	for _, e := range effects {
+		e.Stop()
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/overlay"
+	"github.com/gogpu/ui/state"
 	"github.com/gogpu/ui/widget"
 )
 
@@ -331,8 +332,28 @@ func (w *Widget) toggle(ctx widget.Context) {
 	}
 }
 
+// Mount creates signal bindings for push-based invalidation.
+// Implements [widget.Lifecycle].
+func (w *Widget) Mount(ctx widget.Context) {
+	sched := ctx.Scheduler()
+	if sched == nil {
+		return
+	}
+	if w.cfg.signal != nil {
+		b := state.BindToScheduler(w.cfg.signal, w, sched)
+		w.AddBinding(b)
+	}
+}
+
+// Unmount is called when the dropdown is removed from the widget tree.
+// Implements [widget.Lifecycle].
+func (w *Widget) Unmount() {
+	// Bindings are cleaned up automatically by WidgetBase.CleanupBindings().
+}
+
 // Compile-time interface checks.
 var (
 	_ widget.Widget    = (*Widget)(nil)
 	_ widget.Focusable = (*Widget)(nil)
+	_ widget.Lifecycle = (*Widget)(nil)
 )

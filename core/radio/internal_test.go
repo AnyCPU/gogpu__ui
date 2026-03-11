@@ -1751,3 +1751,18 @@ func TestOptions_GroupDisabledSignal(t *testing.T) {
 		t.Error("disabledSignal.Get() should be true")
 	}
 }
+
+func TestGroupConfig_ResolvedDisabled_ReadonlySignal(t *testing.T) {
+	computed := state.NewComputed(func() bool { return true })
+
+	c := groupConfig{
+		disabled:            false,
+		disabledFn:          func() bool { return false },
+		disabledSignal:      state.NewSignal(false),
+		readonlyDisabledSig: computed,
+	}
+
+	if !c.ResolvedDisabled() {
+		t.Error("ResolvedDisabled() should be true (readonly computed signal overrides all)")
+	}
+}

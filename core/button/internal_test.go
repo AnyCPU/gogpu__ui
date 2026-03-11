@@ -1138,3 +1138,75 @@ func (c *internalMockCanvas) PushClip(_ geometry.Rect)       {}
 func (c *internalMockCanvas) PopClip()                       {}
 func (c *internalMockCanvas) PushTransform(_ geometry.Point) {}
 func (c *internalMockCanvas) PopTransform()                  {}
+
+// --- ReadonlySignal Tests ---
+
+func TestConfig_ResolvedText_ReadonlySignal(t *testing.T) {
+	base := state.NewSignal("base")
+	computed := state.NewComputed(func() string {
+		return "computed:" + base.Get()
+	}, base)
+
+	c := config{
+		text:               "static",
+		textFn:             func() string { return "fn" },
+		textSignal:         state.NewSignal("signal"),
+		readonlyTextSignal: computed,
+	}
+
+	if got := c.ResolvedText(); got != "computed:base" {
+		t.Errorf("ResolvedText() = %q, want %q (readonlySignal > signal > fn > static)", got, "computed:base")
+	}
+
+	base.Set("updated")
+	if got := c.ResolvedText(); got != "computed:updated" {
+		t.Errorf("ResolvedText() = %q after dep change, want %q", got, "computed:updated")
+	}
+}
+
+func TestConfig_ResolvedDisabled_ReadonlySignal(t *testing.T) {
+	flag := state.NewSignal(true)
+	computed := state.NewComputed(func() bool {
+		return flag.Get()
+	}, flag)
+
+	c := config{
+		disabled:               false,
+		disabledFn:             func() bool { return false },
+		disabledSignal:         state.NewSignal(false),
+		readonlyDisabledSignal: computed,
+	}
+
+	if !c.ResolvedDisabled() {
+		t.Error("ResolvedDisabled() should be true (readonly computed signal)")
+	}
+
+	flag.Set(false)
+	if c.ResolvedDisabled() {
+		t.Error("ResolvedDisabled() should be false after computed dependency change")
+	}
+}
+
+func TestConfig_ResolvedText_ReadonlySignalPriority(t *testing.T) {
+	computed := state.NewComputed(func() string { return "readonly" })
+
+	t.Run("readonlySignal beats signal, fn, and static", func(t *testing.T) {
+		c := config{
+			text:               "static",
+			textFn:             func() string { return "fn" },
+			textSignal:         state.NewSignal("signal"),
+			readonlyTextSignal: computed,
+		}
+		if got := c.ResolvedText(); got != "readonly" {
+			t.Errorf("ResolvedText() = %q, want %q", got, "readonly")
+		}
+	})
+
+	t.Run("signal used when no readonlySignal", func(t *testing.T) {
+		sig := state.NewSignal("signal")
+		c := config{text: "static", textFn: func() string { return "fn" }, textSignal: sig}
+		if got := c.ResolvedText(); got != "signal" {
+			t.Errorf("ResolvedText() = %q, want %q", got, "signal")
+		}
+	})
+}

@@ -58,10 +58,20 @@ func GroupDisabledFn(fn func() bool) GroupOption {
 }
 
 // GroupDisabledSignal binds the group's disabled state to a reactive signal.
-// When set, the signal value takes precedence over both [GroupDisabledFn] and [GroupDisabled].
+// When set, the signal value takes precedence over both [GroupDisabledFn] and [GroupDisabled]
+// but not over [GroupDisabledReadonlySignal].
 func GroupDisabledSignal(sig state.Signal[bool]) GroupOption {
 	return func(c *groupConfig) {
 		c.disabledSignal = sig
+	}
+}
+
+// GroupDisabledReadonlySignal binds the group's disabled state to a read-only signal.
+// This is useful for computed signals created via [state.NewComputed].
+// When set, this takes highest precedence over all other disabled sources.
+func GroupDisabledReadonlySignal(sig state.ReadonlySignal[bool]) GroupOption {
+	return func(c *groupConfig) {
+		c.readonlyDisabledSig = sig
 	}
 }
 

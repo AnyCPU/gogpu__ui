@@ -529,6 +529,80 @@ func TestWidgetBase_Children_ReturnsCopy(t *testing.T) {
 	}
 }
 
+// mockStopper is a test helper implementing Stopper.
+type mockStopper struct {
+	stopped bool
+}
+
+func (m *mockStopper) Stop() {
+	m.stopped = true
+}
+
+func TestWidgetBase_MountedState(t *testing.T) {
+	w := NewWidgetBase()
+	if w.IsMounted() {
+		t.Error("expected not mounted initially")
+	}
+
+	w.SetMounted(true)
+	if !w.IsMounted() {
+		t.Error("expected mounted after SetMounted(true)")
+	}
+
+	w.SetMounted(false)
+	if w.IsMounted() {
+		t.Error("expected not mounted after SetMounted(false)")
+	}
+}
+
+func TestWidgetBase_AddBinding(t *testing.T) {
+	w := NewWidgetBase()
+
+	unbindCalled := 0
+	b := &testUnbinder{fn: func() { unbindCalled++ }}
+	w.AddBinding(b)
+
+	// nil binding should be ignored
+	w.AddBinding(nil)
+
+	w.CleanupBindings()
+	if unbindCalled != 1 {
+		t.Errorf("unbindCalled = %d, want 1", unbindCalled)
+	}
+
+	// Second cleanup should be no-op (bindings already cleared).
+	w.CleanupBindings()
+	if unbindCalled != 1 {
+		t.Errorf("unbindCalled = %d after second cleanup, want 1", unbindCalled)
+	}
+}
+
+func TestWidgetBase_AddEffect(t *testing.T) {
+	w := NewWidgetBase()
+
+	s := &mockStopper{}
+	w.AddEffect(s)
+
+	// nil effect should be ignored
+	w.AddEffect(nil)
+
+	w.CleanupBindings()
+	if !s.stopped {
+		t.Error("effect should have been stopped on cleanup")
+	}
+}
+
+// testUnbinder is a test helper implementing Unbinder.
+type testUnbinder struct {
+	fn func()
+}
+
+func (u *testUnbinder) Unbind() {
+	if u.fn != nil {
+		u.fn()
+	}
+}
+
 func BenchmarkWidgetBase_Bounds(b *testing.B) {
 	w := NewWidgetBase()
 	w.SetBounds(geometry.NewRect(10, 20, 100, 50))

@@ -181,7 +181,8 @@ func (c *themeScopeContext) Scale() float32                     { return c.paren
 func (c *themeScopeContext) OverlayManager() widget.OverlayManager {
 	return c.parent.OverlayManager()
 }
-func (c *themeScopeContext) WindowSize() geometry.Size { return c.parent.WindowSize() }
+func (c *themeScopeContext) WindowSize() geometry.Size      { return c.parent.WindowSize() }
+func (c *themeScopeContext) Scheduler() widget.SchedulerRef { return c.parent.Scheduler() }
 
 // ThemeProvider returns the overridden theme instead of the parent's theme.
 func (c *themeScopeContext) ThemeProvider() widget.ThemeProvider {

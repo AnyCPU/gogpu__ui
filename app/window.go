@@ -71,6 +71,9 @@ func newWindow(
 		}
 	})
 
+	// Set scheduler on context so widgets can bind signals on mount.
+	ctx.SetScheduler(scheduler)
+
 	// Set the theme provider on the context so widgets can access theme.
 	if t != nil {
 		ctx.SetThemeProvider(t)
@@ -93,15 +96,37 @@ func newWindow(
 		}
 	})
 
+	// Wire scheduler to wake render loop when signals change.
+	if wp != nil {
+		scheduler.SetOnDirty(func() {
+			w.needsLayout = true
+			if w.wp != nil {
+				w.wp.RequestRedraw()
+			}
+		})
+	}
+
 	return w
 }
 
 // SetRoot sets the root widget for this window.
 //
 // Setting a new root triggers a full layout on the next Frame call.
+// The old root tree is unmounted and the new root tree is mounted,
+// which triggers signal binding setup/teardown via [widget.Lifecycle].
 func (w *Window) SetRoot(root widget.Widget) {
+	// Unmount old tree.
+	if w.root != nil {
+		widget.UnmountTree(w.root)
+	}
+
 	w.root = root
 	w.needsLayout = true
+
+	// Mount new tree.
+	if w.root != nil {
+		widget.MountTree(w.root, w.ctx)
+	}
 }
 
 // Root returns the current root widget, or nil if none is set.
@@ -198,8 +223,14 @@ func (w *Window) Frame() {
 	// Reset cursor for this frame.
 	w.ctx.ResetCursor()
 
-	// Flush any pending state changes.
-	w.scheduler.Flush()
+	// Flush pending signal changes (may trigger new dirty marks).
+	const maxReflushes = 2
+	for i := 0; i <= maxReflushes; i++ {
+		w.scheduler.Flush()
+		if w.scheduler.PendingCount() == 0 {
+			break
+		}
+	}
 
 	// Update scale factor (may change between frames on multi-monitor setups).
 	w.updateScale()

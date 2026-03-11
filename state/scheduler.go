@@ -17,6 +17,7 @@ type Scheduler struct {
 	mu       sync.Mutex
 	pending  map[widget.Widget]struct{}
 	flushFn  func([]widget.Widget)
+	onDirty  func()
 	batching bool
 	flushing bool
 }
@@ -46,10 +47,27 @@ func NewScheduler(flushFn func([]widget.Widget)) *Scheduler {
 	}
 }
 
+// SetOnDirty registers a callback that is invoked when the pending set
+// transitions from empty to non-empty. This is typically used to wake the
+// render loop (e.g., call RequestRedraw) so that a new frame is scheduled.
+//
+// The callback is called outside the scheduler's lock and must be safe
+// for concurrent use. Only one callback can be registered; subsequent
+// calls replace the previous one. Pass nil to remove the callback.
+func (s *Scheduler) SetOnDirty(fn func()) {
+	s.mu.Lock()
+	s.onDirty = fn
+	s.mu.Unlock()
+}
+
 // MarkDirty queues a widget for re-render.
 //
 // If the same widget is marked dirty multiple times before the next
 // [Scheduler.Flush] it is only processed once (deduplication).
+//
+// When the pending set transitions from empty to non-empty, the onDirty
+// callback (if set via [Scheduler.SetOnDirty]) is invoked to wake the
+// render loop.
 //
 // If the scheduler is not currently inside a [Scheduler.Batch] call,
 // MarkDirty is a lightweight enqueue operation. The actual flush happens
@@ -60,8 +78,15 @@ func (s *Scheduler) MarkDirty(w widget.Widget) {
 	}
 
 	s.mu.Lock()
+	wasEmpty := len(s.pending) == 0
 	s.pending[w] = struct{}{}
+	onDirty := s.onDirty
 	s.mu.Unlock()
+
+	// Notify on first dirty widget (wake render loop).
+	if wasEmpty && onDirty != nil {
+		onDirty()
+	}
 }
 
 // Flush processes all pending dirty widgets by calling the flush function

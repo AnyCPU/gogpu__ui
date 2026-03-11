@@ -25,10 +25,20 @@ func TextFn(fn func() string) Option {
 }
 
 // TextSignal binds the button's display text to a reactive signal.
-// When set, the signal value takes precedence over both [TextFn] and [TextOpt].
+// When set, the signal value takes precedence over both [TextFn] and [TextOpt]
+// but not over [TextReadonlySignal].
 func TextSignal(sig state.Signal[string]) Option {
 	return func(c *config) {
 		c.textSignal = sig
+	}
+}
+
+// TextReadonlySignal binds the button's display text to a read-only signal.
+// This is useful for computed signals created via [state.NewComputed].
+// When set, this takes highest precedence over all other text sources.
+func TextReadonlySignal(sig state.ReadonlySignal[string]) Option {
+	return func(c *config) {
+		c.readonlyTextSignal = sig
 	}
 }
 
@@ -58,10 +68,20 @@ func DisabledFn(fn func() bool) Option {
 }
 
 // DisabledSignal binds the button's disabled state to a reactive signal.
-// When set, the signal value takes precedence over both [DisabledFn] and [Disabled].
+// When set, the signal value takes precedence over both [DisabledFn] and [Disabled]
+// but not over [DisabledReadonlySignal].
 func DisabledSignal(sig state.Signal[bool]) Option {
 	return func(c *config) {
 		c.disabledSignal = sig
+	}
+}
+
+// DisabledReadonlySignal binds the button's disabled state to a read-only signal.
+// This is useful for computed signals created via [state.NewComputed].
+// When set, this takes highest precedence over all other disabled sources.
+func DisabledReadonlySignal(sig state.ReadonlySignal[bool]) Option {
+	return func(c *config) {
+		c.readonlyDisabledSignal = sig
 	}
 }
 

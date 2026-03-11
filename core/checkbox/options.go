@@ -25,10 +25,20 @@ func LabelFn(fn func() string) Option {
 }
 
 // LabelSignal binds the checkbox's display label to a reactive signal.
-// When set, the signal value takes precedence over both [LabelFn] and [LabelOpt].
+// When set, the signal value takes precedence over both [LabelFn] and [LabelOpt]
+// but not over [LabelReadonlySignal].
 func LabelSignal(sig state.Signal[string]) Option {
 	return func(c *config) {
 		c.labelSignal = sig
+	}
+}
+
+// LabelReadonlySignal binds the checkbox's display label to a read-only signal.
+// This is useful for computed signals created via [state.NewComputed].
+// When set, this takes highest precedence over all other label sources.
+func LabelReadonlySignal(sig state.ReadonlySignal[string]) Option {
+	return func(c *config) {
+		c.readonlyLabelSig = sig
 	}
 }
 
@@ -84,10 +94,20 @@ func DisabledFn(fn func() bool) Option {
 }
 
 // DisabledSignal binds the checkbox's disabled state to a reactive signal.
-// When set, the signal value takes precedence over both [DisabledFn] and [Disabled].
+// When set, the signal value takes precedence over both [DisabledFn] and [Disabled]
+// but not over [DisabledReadonlySignal].
 func DisabledSignal(sig state.Signal[bool]) Option {
 	return func(c *config) {
 		c.disabledSignal = sig
+	}
+}
+
+// DisabledReadonlySignal binds the checkbox's disabled state to a read-only signal.
+// This is useful for computed signals created via [state.NewComputed].
+// When set, this takes highest precedence over all other disabled sources.
+func DisabledReadonlySignal(sig state.ReadonlySignal[bool]) Option {
+	return func(c *config) {
+		c.readonlyDisabledSig = sig
 	}
 }
 
