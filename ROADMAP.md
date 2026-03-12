@@ -102,6 +102,7 @@ v1.0.0  → Production (when ready)
 │  core/textfield/   │                 │                      │
 │  core/dropdown/    │                 │                      │
 │  core/slider/ ✅   │                 │                      │
+│  core/dialog/ ✅   │                 │                      │
 │  focus/ overlay/   │                 │                      │
 │  (Phase 2 ✅)      │                 │                      │
 ├─────────────────────────────────────────────────────────────┤
@@ -283,6 +284,7 @@ v1.0.0  → Production (when ready)
 | ~~TASK-UI-057 SP1~~ | Retained-mode: dirty tracking, DrawTree, DrawStats | ✅ Done |
 | ~~TASK-UI-057 SP2~~ | RepaintBoundary: per-widget pixel caching | ✅ Done |
 | ~~TASK-UI-015~~ | Slider Widget (continuous/discrete, H/V, M3 painter) | ✅ Done |
+| ~~TASK-UI-026~~ | Dialog/Modal (backdrop overlay, action buttons, focus trapping, M3 painter) | ✅ Done |
 
 **Remaining:**
 
@@ -290,7 +292,6 @@ v1.0.0  → Production (when ready)
 |------|-------------|-----|----------|
 | TASK-UI-057 SP3 | scene.Scene integration (tile-parallel rendering) | ~700 | P0 |
 | TASK-UI-028 | ScrollView | ~800 | P1 |
-| TASK-UI-026 | Dialog/Modal | ~700 | P1 |
 | TASK-UI-024 | Animation Engine | ~1,200 | P0 |
 | TASK-UI-029 | TabView | ~500 | P1 |
 | TASK-UI-016 | Progress Indicators | ~500 | P2 |
@@ -305,7 +306,7 @@ v1.0.0  → Production (when ready)
 **Deliverables:**
 - Rendering optimizations (dirty regions, RepaintBoundary, scene integration)
 - Animation system (Spring, Tween)
-- Additional widgets (Slider ✅, Progress, Dialog, Tooltip)
+- Additional widgets (Slider ✅, Dialog ✅, Progress, Tooltip)
 - Containers (ScrollView, TabView, SplitView)
 - Virtualization for large datasets
 

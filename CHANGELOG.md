@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Dialog Widget — TASK-UI-014)
+- **Dialog/Modal widget** (`core/dialog/`) — modal dialog with backdrop overlay,
+  title, optional content widget, and action buttons. Dismissible via backdrop
+  click and Escape key (configurable). Focus trapping with Tab/Shift+Tab cycling
+  between action buttons. Enter/Space activates focused action. 4-tier title
+  resolution (ReadonlySignal > Signal > Fn > Static). Pluggable Painter pattern
+  with DefaultPainter fallback. Convenience constructors: `Alert()`, `Confirm()`.
+  96.9% test coverage.
+- **Material 3 DialogPainter** (`theme/material3/dialog.go`) — M3 dialog rendering
+  with HCT-derived colors, 24dp corner radius, scrim backdrop, focus ring
+
 ### Added (Slider Widget — TASK-UI-015)
 - **Slider widget** (`core/slider/`) — draggable slider for selecting numeric values
   within a range. Continuous and discrete (step snapping) modes. Horizontal and

@@ -172,14 +172,15 @@ func main() {
 | `core/radio` | Mutually exclusive radio group with vertical/horizontal layout, signal bindings | 96%+ |
 | `core/textfield` | Text input with cursor, selection, clipboard, validation, signal bindings | 96%+ |
 | `core/slider` | Slider: continuous/discrete, horizontal/vertical, drag+keyboard, signal bindings | 94.6% |
+| `core/dialog` | Modal dialog: backdrop overlay, action buttons, focus trapping, Alert/Confirm | 96.9% |
 | `core/dropdown` | Dropdown/select with overlay menu, keyboard navigation, signal bindings | 96%+ |
 | `overlay` | Overlay/popup stack, container, position helper | 95%+ |
 | `primitives` | Box, Text, Image, RepaintBoundary (per-widget pixel caching) | 94.4% |
-| `theme/material3` | Material Design 3 — theme (HCT color science) + 6 component painters | 97%+ |
+| `theme/material3` | Material Design 3 — theme (HCT color science) + 7 component painters | 97%+ |
 | `focus` | Keyboard focus management with Tab/Shift+Tab navigation | 95.2% |
 | `internal/focus` | Internal focus manager implementation | 15.2% |
 
-**Total: ~58,000+ lines of code | 26 packages | 1,600+ tests | ~97% average coverage**
+**Total: ~60,000+ lines of code | 27 packages | 1,700+ tests | ~97% average coverage**
 
 ---
 
@@ -198,6 +199,8 @@ func main() {
 │  core/radio/       │  (Phase 4)      │  (Phase 3)           │
 │  core/textfield/   │                 │                      │
 │  core/dropdown/    │                 │                      │
+│  core/slider/      │                 │                      │
+│  core/dialog/      │                 │                      │
 │  focus/ overlay/ ✅│                │                      │
 ├──────────────┬──────────────────────────────────────────────┤
 │  cdk/        │  Content[C] polymorphic pattern              │
@@ -321,6 +324,34 @@ s := slider.New(
     slider.Min(0), slider.Max(100),
     slider.ValueSignal(volume),  // reads AND writes back on drag
 )
+```
+
+### Dialog
+
+```go
+// Simple alert dialog
+d := dialog.Alert("Error", "File not found.", func() { log.Println("dismissed") })
+d.Show(ctx)
+
+// Confirmation dialog
+d := dialog.Confirm("Delete?", "This cannot be undone.",
+    func() { log.Println("canceled") },
+    func() { deleteItem() },
+)
+d.Show(ctx)
+
+// Custom dialog with M3 painter
+d := dialog.New(
+    dialog.Title("Settings"),
+    dialog.Content(settingsWidget),
+    dialog.Actions(
+        dialog.Action{Label: "Cancel", Variant: dialog.VariantTextOnly},
+        dialog.Action{Label: "Save", Variant: dialog.VariantFilled, Default: true,
+            OnClick: func() { saveSettings() }},
+    ),
+    dialog.PainterOpt(material3.DialogPainter{Theme: m3}),
+)
+d.Show(ctx)
 ```
 
 ### Reactive State
