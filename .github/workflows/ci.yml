@@ -87,45 +87,15 @@ jobs:
       run: go vet ./...
 
     - name: Install race detector
-      run: go install github.com/kolkov/racedetector/cmd/racedetector@latest
+      run: go install github.com/kolkov/racedetector/cmd/racedetector@v0.8.5
 
     - name: Run tests with race detector
       shell: bash
       run: |
-        # Check if there are any test files
         if find . -name "*_test.go" -type f | grep -q .; then
-          # Packages that transitively use //go:embed (TTF fonts) are incompatible
-          # with racedetector's AST instrumentation (it copies .go files to a temp
-          # dir but not embedded assets). Run those with plain go test.
-          # See: https://github.com/kolkov/racedetector/issues/TBD
-          # Packages with //go:embed (TTF fonts) run with plain go test.
-          # racedetector copies .go to temp dir without embedded assets.
-          EMBED_PKGS="./internal/render/... ./render/..."
-
-          # Convert full module paths to ./relative for racedetector
-          MODULE=$(go list -m)
-          NON_EMBED=$(go list ./... \
-            | grep -v 'internal/render' \
-            | grep -v "${MODULE}/render$" \
-            | while IFS= read -r pkg; do
-                if [ "$pkg" = "$MODULE" ]; then
-                  echo "."
-                else
-                  echo "./${pkg#"$MODULE/"}"
-                fi
-              done \
-            | tr '\n' ' ')
-
-          echo "=== Running plain go test for embed packages ==="
-          go test -v -coverprofile=coverage-embed.txt -covermode=atomic $EMBED_PKGS
-
-          echo "=== Running racedetector test for remaining packages ==="
-          racedetector test -v -coverprofile=coverage-race.txt -covermode=atomic $NON_EMBED
-
-          # Merge coverage files
-          echo "mode: atomic" > coverage.txt
-          tail -n +2 coverage-embed.txt >> coverage.txt 2>/dev/null || true
-          tail -n +2 coverage-race.txt >> coverage.txt 2>/dev/null || true
+          # v0.8.5 uses Go overlay instead of file copying, so go:embed works.
+          echo "=== Running racedetector test ==="
+          racedetector test -v -coverprofile=coverage.txt -covermode=atomic ./...
         else
           echo "No test files yet, skipping tests"
           echo "mode: atomic" > coverage.txt
