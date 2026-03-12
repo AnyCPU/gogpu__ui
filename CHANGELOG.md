@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (scene.Scene Integration — TASK-UI-057 SP3)
+- **SceneCanvas adapter** (`internal/render/scene_canvas.go`) — implements `widget.Canvas`
+  by recording drawing commands into `scene.Scene` for tile-parallel rendering.
+  All shape operations (rect, round rect, circle, line) map to scene shapes.
+  Text rendering via gg.Context pass-through preserves MSDF quality.
+  PushClip/PopClip and PushTransform/PopTransform with internal stacks for
+  visibility optimization.
+- **RepaintBoundary scene integration** (`primitives/repaint_boundary.go`) —
+  threshold-based rendering selection: RepaintBoundaries >= 128x128 pixels use
+  `scene.Scene` + `scene.Renderer` for tile-parallel rendering. Smaller widgets
+  use the traditional `gg.Context` path. Scene resources (Renderer, Scene, Pixmap)
+  are lazily initialized and reused across frames. Zero breaking changes to
+  `widget.Canvas` interface.
+
 ### Added (TabView Widget — TASK-UI-029)
 - **TabView widget** (`core/tabview/`) — tabbed navigation container with lazy
   content switching (only selected tab laid out/drawn). Horizontal tab bar with

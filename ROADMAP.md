@@ -288,12 +288,11 @@ v1.0.0  → Production (when ready)
 | ~~TASK-UI-024~~ | Animation Engine (tween, spring, CubicBezier, M3 tokens, Tween[T], Sequence/Parallel) | ✅ Done |
 | ~~TASK-UI-028~~ | ScrollView (vertical/horizontal/both, wheel+keyboard+drag, signal bindings, M3 painter) | ✅ Done |
 | ~~TASK-UI-029~~ | TabView (tabbed navigation, lazy content, closeable, keyboard nav, M3 painter) | ✅ Done |
+| ~~TASK-UI-057 SP3~~ | scene.Scene integration (tile-parallel rendering, SceneCanvas adapter) | ✅ Done |
 
 **Remaining:**
 
 | Task | Description | LOC | Priority |
-|------|-------------|-----|----------|
-| TASK-UI-057 SP3 | scene.Scene integration (tile-parallel rendering) | ~700 | P0 |
 | TASK-UI-016 | Progress Indicators | ~500 | P2 |
 | TASK-UI-021 | VirtualizedList | ~1,500 | P0 |
 | TASK-UI-022 | VirtualizedGrid | ~800 | P1 |

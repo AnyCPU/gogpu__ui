@@ -5,12 +5,20 @@ import (
 	"image/draw"
 
 	"github.com/gogpu/gg"
+	"github.com/gogpu/gg/scene"
 	"github.com/gogpu/ui/a11y"
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	internalRender "github.com/gogpu/ui/internal/render"
 	"github.com/gogpu/ui/widget"
 )
+
+// sceneThresholdPixels is the minimum area (in pixels) for scene.Renderer
+// activation. RepaintBoundaries with area below this threshold use the
+// traditional gg.Context path (lower overhead for small widgets).
+// RepaintBoundaries at or above this threshold use scene.Scene with
+// tile-parallel rendering for better performance on large subtrees.
+const sceneThresholdPixels = 128 * 128
 
 // RepaintBoundary is a display widget that caches its child subtree as a
 // CPU-side pixel buffer (image.RGBA). When the child subtree is clean (no
@@ -21,6 +29,11 @@ import (
 // that isolates expensive subtrees from the rest of the render tree.
 // Users wrap widgets in RepaintBoundary at points where subtrees are
 // expensive to draw and rarely change.
+//
+// For large widgets (>= 128x128 pixels), RepaintBoundary uses scene.Scene
+// with tile-parallel rendering via scene.Renderer, providing better
+// performance for complex subtrees. Small widgets use the traditional
+// gg.Context path to avoid overhead.
 //
 // Cache lifecycle:
 //   - The cache is allocated on first draw (lazy).
@@ -55,6 +68,11 @@ type RepaintBoundary struct {
 
 	// cacheHits tracks how many times the cache was used (for stats).
 	cacheHits int
+
+	// scene.Scene integration (lazily initialized for large widgets).
+	sceneRenderer *scene.Renderer
+	sceneObj      *scene.Scene
+	pixmap        *gg.Pixmap
 }
 
 // Option configures a [RepaintBoundary].
@@ -187,9 +205,21 @@ func (rb *RepaintBoundary) Draw(ctx widget.Context, canvas widget.Canvas) {
 	canvas.DrawImage(rb.cache, bounds.Min)
 }
 
-// renderToCache creates a temporary gg.Context, draws the child into it,
-// and captures the result as an image.RGBA cache.
+// renderToCache selects the rendering strategy based on widget area.
+// Large widgets (>= sceneThresholdPixels) use scene.Scene with tile-parallel
+// rendering for better performance. Small widgets use the traditional
+// gg.Context path to avoid the overhead of scene setup.
 func (rb *RepaintBoundary) renderToCache(ctx widget.Context, w, h int) {
+	if w*h >= sceneThresholdPixels {
+		rb.renderWithScene(ctx, w, h)
+	} else {
+		rb.renderWithContext(ctx, w, h)
+	}
+}
+
+// renderWithContext is the original gg.Context-based rendering path.
+// Used for small widgets where scene.Renderer overhead is not justified.
+func (rb *RepaintBoundary) renderWithContext(ctx widget.Context, w, h int) {
 	// Create offscreen gg.Context.
 	dc := gg.NewContext(w, h)
 
@@ -213,6 +243,45 @@ func (rb *RepaintBoundary) renderToCache(ctx widget.Context, w, h int) {
 
 	// Close the temporary context to free resources.
 	_ = dc.Close()
+}
+
+// renderWithScene uses scene.Scene + scene.Renderer for tile-parallel rendering.
+// The child subtree is drawn into a SceneCanvas (which records into scene.Scene),
+// then the scene is rendered via tile-parallel scene.Renderer into a Pixmap.
+func (rb *RepaintBoundary) renderWithScene(ctx widget.Context, w, h int) {
+	// Initialize or resize scene.Renderer.
+	if rb.sceneRenderer == nil || rb.sceneRenderer.Width() != w || rb.sceneRenderer.Height() != h {
+		if rb.sceneRenderer != nil {
+			rb.sceneRenderer.Close()
+		}
+		rb.sceneRenderer = scene.NewRenderer(w, h)
+	}
+
+	// Initialize or resize Pixmap.
+	if rb.pixmap == nil || rb.pixmap.Width() != w || rb.pixmap.Height() != h {
+		rb.pixmap = gg.NewPixmap(w, h)
+	}
+
+	// Initialize scene (reuse across frames).
+	if rb.sceneObj == nil {
+		rb.sceneObj = scene.NewScene()
+	}
+
+	// Reset scene for this frame.
+	rb.sceneObj.Reset()
+
+	// Build scene from child tree via SceneCanvas adapter.
+	sceneCanvas := internalRender.NewSceneCanvas(rb.sceneObj, w, h)
+	rb.child.Draw(ctx, sceneCanvas)
+	sceneCanvas.Close()
+
+	// Clear pixmap and render the scene.
+	rb.pixmap.Clear(gg.Transparent)
+	_ = rb.sceneRenderer.Render(rb.pixmap, rb.sceneObj)
+
+	// Convert to image.RGBA for cache.
+	rb.cache = rb.pixmap.ToImage()
+	rb.cacheValid = true
 }
 
 // toRGBA converts an image.Image to *image.RGBA efficiently.
@@ -255,13 +324,22 @@ func (rb *RepaintBoundary) Children() []widget.Widget {
 	return []widget.Widget{rb.child}
 }
 
-// Unmount releases the pixel cache when the widget is removed from the tree.
+// Unmount releases the pixel cache and scene resources when the widget is
+// removed from the tree.
 func (rb *RepaintBoundary) Unmount() {
 	rb.cache = nil
 	rb.cacheValid = false
 	rb.cacheWidth = 0
 	rb.cacheHeight = 0
 	rb.cacheHits = 0
+
+	// Release scene resources.
+	if rb.sceneRenderer != nil {
+		rb.sceneRenderer.Close()
+		rb.sceneRenderer = nil
+	}
+	rb.sceneObj = nil
+	rb.pixmap = nil
 }
 
 // --- a11y.Accessible interface ---
