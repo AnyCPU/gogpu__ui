@@ -1,0 +1,141 @@
+package listview
+
+import (
+	"github.com/gogpu/ui/event"
+	"github.com/gogpu/ui/geometry"
+	"github.com/gogpu/ui/widget"
+)
+
+// virtualContent is an internal widget that represents the entire scrollable
+// content area. It reports the total content height to the parent ScrollView
+// but only renders visible items.
+//
+// This is the SwiftUI LazyVStack pattern: the content widget lies about its
+// actual children (only visible ones), but truthfully reports its total height
+// so the scroll view can calculate correct scrollbar position and size.
+type virtualContent struct {
+	widget.WidgetBase
+	list *Widget // back-reference to parent ListView
+}
+
+// Layout returns the total content size: full viewport width and the sum of
+// all item heights (real or estimated). This tells the ScrollView how much
+// scrollable area exists.
+func (vc *virtualContent) Layout(_ widget.Context, c geometry.Constraints) geometry.Size {
+	if vc.list == nil {
+		return geometry.Size{}
+	}
+
+	totalHeight := vc.list.heights.totalHeight()
+
+	// Width fills the available space.
+	width := c.MaxWidth
+	if width >= geometry.Infinity {
+		width = c.MinWidth
+	}
+	if width < c.MinWidth {
+		width = c.MinWidth
+	}
+
+	return geometry.Sz(width, totalHeight)
+}
+
+// Draw renders only the visible items within the current viewport.
+func (vc *virtualContent) Draw(ctx widget.Context, canvas widget.Canvas) {
+	if vc.list == nil {
+		return
+	}
+
+	lv := vc.list
+	itemCount := lv.cfg.ResolvedItemCount()
+
+	// Handle empty state.
+	if itemCount == 0 {
+		lv.painter.PaintEmptyState(canvas, lv.viewportBounds())
+		return
+	}
+
+	scrollY := lv.currentScrollY()
+	viewportH := lv.viewportHeight
+
+	start, end := lv.heights.visibleRange(scrollY, viewportH, lv.cfg.overscan)
+	selectedIdx := lv.cfg.ResolvedSelectedIndex()
+
+	// Update the widget cache for the visible range.
+	lv.cache.update(start, end, lv.cfg.buildItem, selectedIdx, lv.hoveredIndex)
+
+	// Layout and draw each visible item.
+	for i := start; i < end; i++ {
+		w := lv.cache.widgetAt(i - start)
+		if w == nil {
+			continue
+		}
+
+		y := lv.heights.offsetAt(i)
+
+		// Layout the item widget with fixed width, flexible height.
+		itemConstraints := geometry.Constraints{
+			MinWidth:  lv.viewportWidth,
+			MaxWidth:  lv.viewportWidth,
+			MinHeight: 0,
+			MaxHeight: geometry.Infinity,
+		}
+		actualSize := w.Layout(ctx, itemConstraints)
+
+		// Update measured height in lazy mode.
+		lv.heights.setMeasured(i, actualSize.Height)
+
+		// Compute item bounds using actual measured height.
+		itemBounds := geometry.NewRect(0, y, lv.viewportWidth, actualSize.Height)
+
+		// Set widget bounds.
+		if setter, ok := w.(interface{ SetBounds(geometry.Rect) }); ok {
+			setter.SetBounds(itemBounds)
+		}
+
+		// Paint item background (hover).
+		ips := ItemPaintState{
+			Bounds:   itemBounds,
+			Index:    i,
+			Selected: i == selectedIdx,
+			Focused:  i == selectedIdx && lv.IsFocused(),
+			Hovered:  i == lv.hoveredIndex,
+			Disabled: lv.cfg.ResolvedDisabled(),
+		}
+
+		lv.painter.PaintItemBackground(canvas, ips)
+
+		// Paint selection highlight.
+		if ips.Selected {
+			lv.painter.PaintSelection(canvas, ips)
+		}
+
+		// Draw the item widget.
+		w.Draw(ctx, canvas)
+
+		// Draw divider between items (not after the last visible item).
+		if lv.cfg.divider && i < end-1 {
+			divY := y + actualSize.Height
+			lv.painter.PaintDivider(canvas, DividerState{
+				Bounds:    geometry.NewRect(0, divY, lv.viewportWidth, dividerHeight),
+				ItemIndex: i,
+			})
+		}
+	}
+
+	// Check end-reached callback.
+	lv.checkEndReached(end, itemCount)
+}
+
+// Event delegates events back to the parent list for item interaction.
+func (vc *virtualContent) Event(ctx widget.Context, e event.Event) bool {
+	if vc.list == nil {
+		return false
+	}
+	return handleContentEvent(vc.list, ctx, e)
+}
+
+// Children returns nil; visible item widgets are ephemeral and managed by the cache.
+func (vc *virtualContent) Children() []widget.Widget {
+	return nil
+}
