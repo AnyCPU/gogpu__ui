@@ -25,6 +25,7 @@ import (
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/ui/app"
 	"github.com/gogpu/ui/core/checkbox"
+	"github.com/gogpu/ui/core/listview"
 	"github.com/gogpu/ui/core/radio"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/render"
@@ -189,6 +190,14 @@ func buildUI() *primitives.BoxWidget {
 				fmt.Println("theme:", v)
 			}),
 		),
+
+		// ListView section.
+		primitives.Text("ListView (1000 items)").
+			FontSize(18).
+			Bold().
+			Color(widget.RGBA8(66, 66, 66, 255)),
+
+		buildListView(),
 	).
 		Padding(32).
 		Gap(12).
@@ -198,4 +207,35 @@ func buildUI() *primitives.BoxWidget {
 
 	// Outer container provides margin around the card.
 	return primitives.Box(card).Padding(24)
+}
+
+// buildListView creates a ListView with 1000 items to demonstrate virtualization.
+func buildListView() *listview.Widget {
+	items := make([]string, 1000)
+	for i := range items {
+		items[i] = fmt.Sprintf("Item %d — Lorem ipsum dolor sit amet", i+1)
+	}
+
+	return listview.New(
+		listview.ItemCount(len(items)),
+		listview.FixedItemHeight(36),
+		listview.SelectionModeOpt(listview.SelectionSingle),
+		listview.BuildItem(func(ctx listview.ItemContext) widget.Widget {
+			color := widget.RGBA8(33, 33, 33, 255)
+			if ctx.Selected {
+				color = widget.RGBA8(103, 80, 164, 255) // M3 primary
+			}
+			t := primitives.Text(items[ctx.Index]).
+				FontSize(14).
+				Color(color)
+			if ctx.Selected {
+				t = t.Bold()
+			}
+			return t
+		}),
+		listview.Divider(true),
+		listview.OnItemClick(func(index int) {
+			fmt.Printf("clicked: %s\n", items[index])
+		}),
+	)
 }
