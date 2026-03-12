@@ -185,8 +185,9 @@ func main() {
 | Package | Description | Coverage |
 |---------|-------------|----------|
 | `animation` | Animation engine: tween, spring physics, CubicBezier, M3 motion tokens, Tween[T], Sequence/Parallel | 90.3% |
+| `core/scrollview` | Scrollable container: vertical/horizontal/both, wheel+keyboard+drag, PushClip/PushTransform, signal bindings | 96.5% |
 
-**Total: ~63,000+ lines of code | 28 packages | 1,800+ tests | ~97% average coverage**
+**Total: ~65,000+ lines of code | 29 packages | 2,000+ tests | ~97% average coverage**
 
 ---
 
@@ -207,6 +208,7 @@ func main() {
 │  core/dropdown/    │                 │                      │
 │  core/slider/      │                 │                      │
 │  core/dialog/      │                 │                      │
+│  core/scrollview/  │                 │                      │
 │  focus/ overlay/ ✅│                │                      │
 ├──────────────┬──────────────────────────────────────────────┤
 │  cdk/        │  Content[C] polymorphic pattern              │
@@ -389,6 +391,25 @@ animation.Parallel(
     animation.To(opacity, 1.0).Duration(200*time.Millisecond),
     animation.To(translateY, 0).Duration(300*time.Millisecond),
 ).Start(ctrl)
+```
+
+### ScrollView
+
+```go
+// Basic vertical scrollview
+sv := scrollview.New(longContentWidget,
+    scrollview.DirectionOpt(scrollview.Vertical),
+    scrollview.ScrollbarOpt(scrollview.ScrollbarAuto),
+    scrollview.OnScroll(func(x, y float32) { fmt.Printf("scroll: %.0f\n", y) }),
+)
+
+// 2D scrollview with signal binding
+scrollY := state.NewSignal[float32](0)
+sv := scrollview.New(largeCanvas,
+    scrollview.DirectionOpt(scrollview.Both),
+    scrollview.ScrollYSignal(scrollY), // two-way binding
+    scrollview.PainterOpt(material3.ScrollbarPainter{Theme: m3}),
+)
 ```
 
 ### Reactive State

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (ScrollView Widget — TASK-UI-028)
+- **ScrollView widget** (`core/scrollview/`) — scrollable container with content
+  clipping via PushClip/PopClip and translation via PushTransform. Vertical (default),
+  horizontal, and bi-directional scrolling. Mouse wheel, keyboard navigation
+  (arrows, Page Up/Down, Home/End), scrollbar thumb drag, click-on-track scrolling.
+  Scrollbar visibility: auto/always/never. Two-way ScrollX/ScrollY signal bindings.
+  Pluggable Painter pattern with DefaultPainter fallback. 96.5% test coverage, ~1,170 LOC.
+- **Material 3 ScrollbarPainter** (`theme/material3/scrollbar.go`) — M3 scrollbar
+  rendering with HCT-derived colors and opacity states (normal/hover/drag)
+
 ### Added (Animation Engine — TASK-UI-024)
 - **Animation engine** (`animation/`) — comprehensive animation system with:
   - **Tween animations**: Builder pattern `To(signal, target).Duration(d).Ease(e).Start(ctrl)`.
