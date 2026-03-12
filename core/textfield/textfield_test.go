@@ -1,6 +1,7 @@
 package textfield_test
 
 import (
+	"image"
 	"testing"
 
 	"github.com/gogpu/ui/a11y"
@@ -1056,10 +1057,11 @@ func (c *recordingCanvas) DrawText(text string, bounds geometry.Rect, fontSize f
 	c.drawTexts = append(c.drawTexts, drawTextCall{text: text, bounds: bounds, fontSize: fontSize, color: color, bold: bold, align: align})
 }
 
-func (c *recordingCanvas) PushClip(_ geometry.Rect)       {}
-func (c *recordingCanvas) PopClip()                       {}
-func (c *recordingCanvas) PushTransform(_ geometry.Point) {}
-func (c *recordingCanvas) PopTransform()                  {}
+func (c *recordingCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
+func (c *recordingCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *recordingCanvas) PopClip()                                  {}
+func (c *recordingCanvas) PushTransform(_ geometry.Point)            {}
+func (c *recordingCanvas) PopTransform()                             {}
 
 // --- mockCanvas for non-recording tests ---
 
@@ -1077,10 +1079,11 @@ func (c *mockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32)   
 func (c *mockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.Color, _ bool, _ float32) {
 }
 
-func (c *mockCanvas) PushClip(_ geometry.Rect)       {}
-func (c *mockCanvas) PopClip()                       {}
-func (c *mockCanvas) PushTransform(_ geometry.Point) {}
-func (c *mockCanvas) PopTransform()                  {}
+func (c *mockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
+func (c *mockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *mockCanvas) PopClip()                                  {}
+func (c *mockCanvas) PushTransform(_ geometry.Point)            {}
+func (c *mockCanvas) PopTransform()                             {}
 
 // --- Lifecycle Tests ---
 

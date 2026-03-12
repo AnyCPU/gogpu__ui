@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"testing"
 
 	"github.com/gogpu/gpucontext"
@@ -440,6 +441,7 @@ func (m *mockCanvas) DrawCircle(geometry.Point, float32, widget.Color)          
 func (m *mockCanvas) StrokeCircle(geometry.Point, float32, widget.Color, float32)          {}
 func (m *mockCanvas) DrawLine(geometry.Point, geometry.Point, widget.Color, float32)       {}
 func (m *mockCanvas) DrawText(string, geometry.Rect, float32, widget.Color, bool, float32) {}
+func (m *mockCanvas) DrawImage(image.Image, geometry.Point)                                {}
 func (m *mockCanvas) PushClip(geometry.Rect)                                               {}
 func (m *mockCanvas) PopClip()                                                             {}
 func (m *mockCanvas) PushTransform(geometry.Point)                                         {}

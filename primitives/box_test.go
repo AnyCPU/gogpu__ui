@@ -1,6 +1,7 @@
 package primitives_test
 
 import (
+	"image"
 	"testing"
 
 	"github.com/gogpu/ui/a11y"
@@ -572,10 +573,11 @@ func (c *mockCanvas) DrawText(text string, _ geometry.Rect, _ float32, color wid
 	c.lastTextColor = color
 	c.lastText = text
 }
-func (c *mockCanvas) PushClip(_ geometry.Rect)       { c.pushClipCount++ }
-func (c *mockCanvas) PopClip()                       { c.popClipCount++ }
-func (c *mockCanvas) PushTransform(_ geometry.Point) { c.pushTransformCount++ }
-func (c *mockCanvas) PopTransform()                  { c.popTransformCount++ }
+func (c *mockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
+func (c *mockCanvas) PushClip(_ geometry.Rect)                  { c.pushClipCount++ }
+func (c *mockCanvas) PopClip()                                  { c.popClipCount++ }
+func (c *mockCanvas) PushTransform(_ geometry.Point)            { c.pushTransformCount++ }
+func (c *mockCanvas) PopTransform()                             { c.popTransformCount++ }
 
 // eventConsumer is a mock widget that optionally consumes events.
 type eventConsumer struct {

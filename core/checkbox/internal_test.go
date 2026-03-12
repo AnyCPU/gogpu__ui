@@ -1,6 +1,7 @@
 package checkbox
 
 import (
+	"image"
 	"testing"
 
 	"github.com/gogpu/ui/event"
@@ -1070,10 +1071,11 @@ func (c *internalMockCanvas) DrawText(text string, bounds geometry.Rect, fontSiz
 	c.drawTexts = append(c.drawTexts, internalDrawTextCall{text: text, bounds: bounds, fontSize: fontSize, color: color, bold: bold, align: align})
 }
 
-func (c *internalMockCanvas) PushClip(_ geometry.Rect)       {}
-func (c *internalMockCanvas) PopClip()                       {}
-func (c *internalMockCanvas) PushTransform(_ geometry.Point) {}
-func (c *internalMockCanvas) PopTransform()                  {}
+func (c *internalMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
+func (c *internalMockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *internalMockCanvas) PopClip()                                  {}
+func (c *internalMockCanvas) PushTransform(_ geometry.Point)            {}
+func (c *internalMockCanvas) PopTransform()                             {}
 
 // --- Signal Binding Tests ---
 
