@@ -1144,10 +1144,10 @@ The `registry/` package provides a global registry for widget factories:
 
 | Dependency | Purpose | Version |
 |------------|---------|---------|
-| `github.com/gogpu/gg` | 2D graphics + scene.Scene tile-parallel rendering | v0.35.3+ |
+| `github.com/gogpu/gg` | 2D graphics + scene.Scene tile-parallel rendering | v0.36.0 |
 | `github.com/gogpu/gpucontext` | Window/Platform provider interfaces | v0.9.0 |
 | `github.com/coregx/signals` | Reactive state management | v0.1.0 |
-| `golang.org/x/image` | Font rendering infrastructure | v0.36.0 |
+| `golang.org/x/image` | Font rendering infrastructure | v0.37.0 |
 
 Go version: **1.25.0**
 

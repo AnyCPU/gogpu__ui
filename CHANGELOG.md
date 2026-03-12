@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (Dependencies)
+- **gg** v0.35.3 → **v0.36.0** (GPU GlyphMask cache, RoundRectShape SDF, scene clip support, font hinting, ClearType LCD subpixel)
+- **golang.org/x/image** v0.36.0 → **v0.37.0**
+- **golang.org/x/text** v0.34.0 → **v0.35.0**
+- **go-text/typesetting** v0.3.3 → **v0.3.4**
+
 ### Added (scene.Scene Integration — TASK-UI-057 SP3)
 - **SceneCanvas adapter** (`internal/render/scene_canvas.go`) — implements `widget.Canvas`
   by recording drawing commands into `scene.Scene` for tile-parallel rendering.
