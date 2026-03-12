@@ -7,6 +7,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (Dependencies)
+- **gg** v0.35.3 → **v0.36.0** (GPU GlyphMask cache, RoundRectShape SDF, scene clip support, font hinting, ClearType LCD subpixel)
+- **golang.org/x/image** v0.36.0 → **v0.37.0**
+- **golang.org/x/text** v0.34.0 → **v0.35.0**
+- **go-text/typesetting** v0.3.3 → **v0.3.4**
+
+### Added (scene.Scene Integration — TASK-UI-057 SP3)
+- **SceneCanvas adapter** (`internal/render/scene_canvas.go`) — implements `widget.Canvas`
+  by recording drawing commands into `scene.Scene` for tile-parallel rendering.
+  All shape operations (rect, round rect, circle, line) map to scene shapes.
+  Text rendering via gg.Context pass-through preserves MSDF quality.
+  PushClip/PopClip and PushTransform/PopTransform with internal stacks for
+  visibility optimization.
+- **RepaintBoundary scene integration** (`primitives/repaint_boundary.go`) —
+  threshold-based rendering selection: RepaintBoundaries >= 128x128 pixels use
+  `scene.Scene` + `scene.Renderer` for tile-parallel rendering. Smaller widgets
+  use the traditional `gg.Context` path. Scene resources (Renderer, Scene, Pixmap)
+  are lazily initialized and reused across frames. Zero breaking changes to
+  `widget.Canvas` interface.
+
+### Added (TabView Widget — TASK-UI-029)
+- **TabView widget** (`core/tabview/`) — tabbed navigation container with lazy
+  content switching (only selected tab laid out/drawn). Horizontal tab bar with
+  Top/Bottom positioning. Click-to-select, closeable tabs (per-tab override),
+  keyboard navigation (Left/Right with wrap-around, Home/End, skip disabled).
+  Two-way SelectedSignal binding. Pluggable Painter pattern with DefaultPainter
+  fallback. Equal-width tab distribution. 92.1% test coverage.
+- **Material 3 TabViewPainter** (`theme/material3/tabview.go`) — M3 tab bar
+  rendering with HCT-derived colors, 3px rounded indicator, hover overlay,
+  focus ring, close button X icon, disabled state
+
+### Added (ScrollView Widget — TASK-UI-028)
+- **ScrollView widget** (`core/scrollview/`) — scrollable container with content
+  clipping via PushClip/PopClip and translation via PushTransform. Vertical (default),
+  horizontal, and bi-directional scrolling. Mouse wheel, keyboard navigation
+  (arrows, Page Up/Down, Home/End), scrollbar thumb drag, click-on-track scrolling.
+  Scrollbar visibility: auto/always/never. Two-way ScrollX/ScrollY signal bindings.
+  Pluggable Painter pattern with DefaultPainter fallback. 96.5% test coverage, ~1,170 LOC.
+- **Material 3 ScrollbarPainter** (`theme/material3/scrollbar.go`) — M3 scrollbar
+  rendering with HCT-derived colors and opacity states (normal/hover/drag)
+
+### Added (Animation Engine — TASK-UI-024)
+- **Animation engine** (`animation/`) — comprehensive animation system with:
+  - **Tween animations**: Builder pattern `To(signal, target).Duration(d).Ease(e).Start(ctrl)`.
+    Delay, repeat (finite/infinite), auto-reverse, OnDone callback.
+  - **Spring physics**: Damped harmonic oscillator with sub-stepped Euler integration.
+    `SpringTo(signal, target).Stiffness(s).DampingRatio(d).Start(ctrl)`.
+    Dual-threshold convergence (restDelta + restSpeed). Velocity preservation on retarget.
+  - **CubicBezier easing**: 11-sample table + Newton-Raphson + bisection fallback (~10ns/eval).
+  - **ThreePointCubic**: Exact M3 Emphasized curve (two joined cubic segments).
+  - **M3 motion tokens**: 7 easing curves, 16 duration tokens (50ms-1000ms),
+    4 damping ratios, 4 stiffness presets (from Jetpack Compose).
+  - **Tween[T] evaluator**: Generic type mapping (Color, Point, Size) from float32 progress.
+    Flutter pattern: engine drives float32, Tween maps to any type.
+  - **Composition**: Sequence (chain) and Parallel for multi-animation orchestration.
+  - **Controller**: Auto-cancel per signal, Tick(dt), HasActive(), CancelAll().
+    Spring velocity transfer on auto-cancel. 0% CPU when idle.
+  - 73 tests, 90.3% coverage, ~2,800 LOC total.
+
+### Added (Dialog Widget — TASK-UI-014)
+- **Dialog/Modal widget** (`core/dialog/`) — modal dialog with backdrop overlay,
+  title, optional content widget, and action buttons. Dismissible via backdrop
+  click and Escape key (configurable). Focus trapping with Tab/Shift+Tab cycling
+  between action buttons. Enter/Space activates focused action. 4-tier title
+  resolution (ReadonlySignal > Signal > Fn > Static). Pluggable Painter pattern
+  with DefaultPainter fallback. Convenience constructors: `Alert()`, `Confirm()`.
+  96.9% test coverage.
+- **Material 3 DialogPainter** (`theme/material3/dialog.go`) — M3 dialog rendering
+  with HCT-derived colors, 24dp corner radius, scrim backdrop, focus ring
+
+### Added (Slider Widget — TASK-UI-015)
+- **Slider widget** (`core/slider/`) — draggable slider for selecting numeric values
+  within a range. Continuous and discrete (step snapping) modes. Horizontal and
+  vertical orientations. Mouse drag, click-on-track, full keyboard navigation
+  (arrows, Home/End, PgUp/PgDn). Two-way ValueSignal binding, DisabledSignal.
+  Pluggable Painter pattern with DefaultPainter fallback. 94.6% test coverage.
+- **Material 3 SliderPainter** (`theme/material3/slider.go`) — M3 slider rendering
+  with HCT-derived colors, state modifiers (hover/drag/focus/disabled), tick marks
+
+### Added (Retained-Mode Rendering — TASK-UI-057 Sub-Phase 2)
+- **RepaintBoundary widget** (`primitives/repaint_boundary.go`) — caches child
+  subtree as CPU-side pixel buffer (image.RGBA). When the subtree is clean, the
+  cached image is composited directly instead of re-rendering descendants.
+  Flutter RepaintBoundary pattern for explicit opt-in caching boundaries.
+- **DrawImage on Canvas** — `widget.Canvas.DrawImage(img, at)` for blitting cached
+  pixel buffers. Used by RepaintBoundary for cache compositing.
+- **CachedWidgets in DrawStats** — `widget.DrawStats.CachedWidgets` counter tracks
+  how many widgets were served from cache during draw traversal.
+
 ### Added (Professional Font — Inter)
 - **Inter font for UI text** — replaced Go fonts (goregular/gobold) with
   Inter Regular (400) and Bold (700). Inter is designed specifically for

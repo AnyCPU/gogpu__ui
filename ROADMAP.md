@@ -96,12 +96,16 @@ v1.0.0  → Production (when ready)
 │  theme/material3   │  theme/fluent   │  theme/cupertino     │
 │  (Complete ✅)     │   (Phase 4)     │    (Phase 4)         │
 ├─────────────────────────────────────────────────────────────┤
-│  core/button/      │  docking/       │  animation/          │
-│  core/checkbox/    │  DockingHost    │  Animation, Spring   │
-│  core/textfield/   │  (Phase 4)      │  (Phase 3)           │
-│  core/dropdown/    │                 │                      │
-│  focus/ overlay/   │                 │                      │
-│  (Complete ✅)     │                 │                      │
+│  core/button/      │  animation/ ✅  │  docking/            │
+│  core/checkbox/    │  Tween, Spring  │  DockingHost         │
+│  core/radio/       │  M3 motion      │  (Phase 4)           │
+│  core/textfield/   │                 │                      │
+│  core/dropdown/    │  internal/      │                      │
+│  core/slider/ ✅   │  render/        │                      │
+│  core/dialog/ ✅   │  Canvas +       │                      │
+│  core/scrollview/✅│  SceneCanvas ✅ │                      │
+│  core/tabview/ ✅  │  (tile-parallel │                      │
+│  focus/ overlay/ ✅│   scene.Scene)  │                      │
 ├─────────────────────────────────────────────────────────────┤
 │  layout/                            │  state/               │
 │  VStack, HStack, Grid, Flexbox      │  coregx/signals       │
@@ -267,39 +271,46 @@ v1.0.0  → Production (when ready)
 
 ---
 
-### Phase 3: RC (v0.3.0)
+### Phase 3: RC (v0.3.0) — In Progress
 
 **Goal:** Enterprise features, rendering optimizations, containers
 
-**Tasks (~12K LOC):**
+**Completed:**
+
+| Task | Description | Status |
+|------|-------------|--------|
+| ~~SIGNALS-006~~ | Automatic signal binding lifecycle (Mount/Unmount) | ✅ Done |
+| ~~SIGNALS-007~~ | Scheduler integration with render loop | ✅ Done |
+| ~~SIGNALS-008~~ | ReadonlySignal, Computed properties, Effect patterns | ✅ Done |
+| ~~TASK-UI-057 SP1~~ | Retained-mode: dirty tracking, DrawTree, DrawStats | ✅ Done |
+| ~~TASK-UI-057 SP2~~ | RepaintBoundary: per-widget pixel caching | ✅ Done |
+| ~~TASK-UI-015~~ | Slider Widget (continuous/discrete, H/V, M3 painter) | ✅ Done |
+| ~~TASK-UI-026~~ | Dialog/Modal (backdrop overlay, action buttons, focus trapping, M3 painter) | ✅ Done |
+| ~~TASK-UI-024~~ | Animation Engine (tween, spring, CubicBezier, M3 tokens, Tween[T], Sequence/Parallel) | ✅ Done |
+| ~~TASK-UI-028~~ | ScrollView (vertical/horizontal/both, wheel+keyboard+drag, signal bindings, M3 painter) | ✅ Done |
+| ~~TASK-UI-029~~ | TabView (tabbed navigation, lazy content, closeable, keyboard nav, M3 painter) | ✅ Done |
+| ~~TASK-UI-057 SP3~~ | scene.Scene integration (tile-parallel rendering, SceneCanvas adapter) | ✅ Done |
+
+**Remaining:**
 
 | Task | Description | LOC | Priority |
 |------|-------------|-----|----------|
-| TASK-UI-015 | Slider Widget | ~800 | P1 |
 | TASK-UI-016 | Progress Indicators | ~500 | P2 |
-| TASK-UI-018 | Typography System | ~600 | P1 |
-| TASK-UI-019 | Icon System | ~400 | P2 |
 | TASK-UI-021 | VirtualizedList | ~1,500 | P0 |
 | TASK-UI-022 | VirtualizedGrid | ~800 | P1 |
-| TASK-UI-024 | Animation Engine | ~1,200 | P0 |
 | TASK-UI-025 | Transitions | ~600 | P2 |
-| TASK-UI-026 | Dialog/Modal | ~700 | P1 |
 | TASK-UI-027 | Popover/Tooltip | ~600 | P1 |
-| TASK-UI-028 | ScrollView | ~800 | P1 |
-| TASK-UI-029 | TabView | ~500 | P1 |
 | TASK-UI-030 | SplitView | ~400 | P2 |
-| TASK-UI-053 | Dirty Region Tracking | ~500 | P1 |
-| TASK-UI-054 | Layer Compositing & Caching | ~800 | P2 |
-| SIGNALS-006 | Automatic signal binding lifecycle (Mount/Unmount) | ~300 | P2 |
-| SIGNALS-007 | Scheduler integration with render loop | ~150 | P2 |
-| SIGNALS-008 | Computed properties & Effect patterns | ~200 | P3 |
+| TASK-UI-018 | Typography System | ~600 | P1 |
+| TASK-UI-019 | Icon System | ~400 | P2 |
 
 **Deliverables:**
-- Virtualization for large datasets
+- Rendering optimizations (dirty regions, RepaintBoundary, scene integration)
 - Animation system (Spring, Tween)
-- Additional widgets (Slider, Progress, Dialog, Tooltip)
-- Containers (ScrollView, TabView, SplitView)
-- Rendering optimizations (dirty regions, layer caching)
+- Additional widgets (Slider ✅, Dialog ✅, Progress, Tooltip)
+- Animation system ✅ (Tween, Spring, M3 motion, CubicBezier, Sequence/Parallel)
+- Containers (ScrollView ✅, TabView ✅, SplitView)
+- Virtualization for large datasets
 
 ---
 
@@ -340,7 +351,7 @@ v1.0.0  → Production (when ready)
 | Phase 1.5 (Extensibility) | 6 | ~9K | ✅ Complete |
 | Phase 2 (Beta) | 16 | ~15K | ✅ Complete (16/16) |
 | Phase 2.5 (Signals) | 5 | ~1.5K | ✅ Complete |
-| Phase 3 (RC) | 15 | ~10K | Planned |
+| Phase 3 (RC) | 19 | ~10K | In Progress (11/19 done) |
 | Phase 4 (v1.0) | 10 | ~24K | Planned |
 | **Total** | **62+** | **~80K LOC** | |
 
@@ -350,7 +361,7 @@ v1.0.0  → Production (when ready)
 
 | Dependency | Version | Purpose | Status |
 |------------|---------|---------|--------|
-| gogpu/gg | v0.32.0 | 2D rendering | ✅ Integrated |
+| gogpu/gg | v0.35.3 | 2D rendering | ✅ Integrated |
 | gogpu/gpucontext | v0.9.0 | Shared interfaces | ✅ Integrated |
 | coregx/signals | v0.1.0 | State management | ✅ Integrated |
 | golang.org/x/image | v0.36.0 | Standard Go fonts | ✅ Integrated |

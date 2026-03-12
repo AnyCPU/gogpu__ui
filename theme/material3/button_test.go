@@ -1,6 +1,7 @@
 package material3_test
 
 import (
+	"image"
 	"testing"
 
 	"github.com/gogpu/ui/core/button"
@@ -68,6 +69,8 @@ func (c *recordCanvas) DrawText(text string, bounds geometry.Rect, fontSize floa
 		fontSize: fontSize, color: color, bold: bold, align: align,
 	})
 }
+
+func (c *recordCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 
 func (c *recordCanvas) PushClip(r geometry.Rect) {}
 

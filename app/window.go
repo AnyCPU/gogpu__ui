@@ -434,6 +434,7 @@ func (w *Window) DrawTo(canvas widget.Canvas) bool {
 		ui.Logger().LogAttrs(context.Background(), slog.LevelDebug, "DrawTo: rendered",
 			slog.Int("dirty", w.lastDrawStats.DirtyWidgets),
 			slog.Int("clean", w.lastDrawStats.CleanWidgets),
+			slog.Int("cached", w.lastDrawStats.CachedWidgets),
 			slog.Int("total", w.lastDrawStats.TotalWidgets),
 		)
 	}

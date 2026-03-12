@@ -1,6 +1,10 @@
 package widget
 
-import "github.com/gogpu/ui/geometry"
+import (
+	"image"
+
+	"github.com/gogpu/ui/geometry"
+)
 
 // Canvas provides drawing operations for widgets.
 //
@@ -63,6 +67,13 @@ type Canvas interface {
 	// The fontSize is in logical pixels. The bold flag selects bold weight.
 	// The align parameter controls horizontal alignment: 0 = left, 0.5 = center, 1 = right.
 	DrawText(text string, bounds geometry.Rect, fontSize float32, color Color, bold bool, align float32)
+
+	// DrawImage draws an image at the specified position.
+	//
+	// The image is drawn with its top-left corner at the given point.
+	// The image is composited using source-over blending. This method
+	// is used by RepaintBoundary to blit cached subtree renders.
+	DrawImage(img image.Image, at geometry.Point)
 
 	// PushClip pushes a clipping rectangle onto the clip stack.
 	//

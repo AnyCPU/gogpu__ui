@@ -1,6 +1,7 @@
 package render
 
 import (
+	"image"
 	"math"
 	"sync"
 
@@ -380,6 +381,33 @@ func (c *Canvas) DrawText(s string, bounds geometry.Rect, fontSize float32, colo
 	x = math.Round(x)
 
 	c.dc.DrawString(s, x, baselineY)
+}
+
+// DrawImage draws an image at the specified position.
+//
+// The image is composited using source-over blending via gg.DrawImage.
+// The position is adjusted by the current transform offset and snapped
+// to the pixel grid.
+func (c *Canvas) DrawImage(img image.Image, at geometry.Point) {
+	if img == nil {
+		return
+	}
+
+	// Apply current transform and snap to pixel grid.
+	at = c.applyTransformPoint(at)
+
+	// Create bounding rect for visibility check.
+	bounds := img.Bounds()
+	imgW := float32(bounds.Dx())
+	imgH := float32(bounds.Dy())
+	drawRect := geometry.NewRect(at.X, at.Y, imgW, imgH)
+	if !c.isVisible(drawRect) {
+		return
+	}
+
+	// Convert image.Image to gg.ImageBuf and draw via gg.Context.
+	buf := gg.ImageBufFromImage(img)
+	c.dc.DrawImage(buf, float64(at.X), float64(at.Y))
 }
 
 // snapF rounds a float32 to the nearest integer for pixel-perfect rendering.

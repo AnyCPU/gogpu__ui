@@ -1,6 +1,7 @@
 package widget
 
 import (
+	"image"
 	"testing"
 
 	"github.com/gogpu/ui/event"
@@ -281,7 +282,7 @@ func TestDrawStats_ZeroValue(t *testing.T) {
 
 	if stats.TotalWidgets != 0 || stats.DrawnWidgets != 0 ||
 		stats.SkippedWidgets != 0 || stats.DirtyWidgets != 0 ||
-		stats.CleanWidgets != 0 {
+		stats.CleanWidgets != 0 || stats.CachedWidgets != 0 {
 		t.Error("zero-valued DrawStats should have all fields zero")
 	}
 }
@@ -298,6 +299,7 @@ func (c *noopCanvas) DrawCircle(geometry.Point, float32, Color)                 
 func (c *noopCanvas) StrokeCircle(geometry.Point, float32, Color, float32)          {}
 func (c *noopCanvas) DrawLine(geometry.Point, geometry.Point, Color, float32)       {}
 func (c *noopCanvas) DrawText(string, geometry.Rect, float32, Color, bool, float32) {}
+func (c *noopCanvas) DrawImage(image.Image, geometry.Point)                         {}
 func (c *noopCanvas) PushClip(geometry.Rect)                                        {}
 func (c *noopCanvas) PopClip()                                                      {}
 func (c *noopCanvas) PushTransform(geometry.Point)                                  {}

@@ -32,6 +32,12 @@ type DrawStats struct {
 	// their needsRedraw flag set. These are candidates for pixel caching
 	// in Sub-Phase 2.
 	CleanWidgets int
+
+	// CachedWidgets is the number of RepaintBoundary widgets that served
+	// their content from a cached pixmap instead of re-rendering the
+	// child subtree. This is the primary metric for Sub-Phase 2 pixel
+	// caching effectiveness.
+	CachedWidgets int
 }
 
 // DrawTree performs a draw traversal of the widget tree rooted at w,

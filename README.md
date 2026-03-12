@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/gogpu/ui/actions"><img src="https://github.com/gogpu/ui/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/gogpu/ui"><img src="https://img.shields.io/badge/status-Phase_2_Beta-brightgreen" alt="Status"></a>
+  <a href="https://github.com/gogpu/ui"><img src="https://img.shields.io/badge/status-Phase_3_RC-blue" alt="Status"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go Version"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
   <a href="https://github.com/gogpu/gogpu/stargazers"><img src="https://img.shields.io/github/stars/gogpu/gogpu?style=flat&labelColor=555&color=yellow" alt="Stars"></a>
@@ -141,7 +141,7 @@ func main() {
 | `geometry` | Point, Size, Rect, Constraints, Insets | 98.8% |
 | `event` | MouseEvent, KeyEvent, WheelEvent, FocusEvent, Modifiers | 100% |
 | `widget` | Widget, WidgetBase, Context, Canvas, Lifecycle (mount/unmount), SchedulerRef | 100% |
-| `internal/render` | Canvas implementation using gogpu/gg | 96.5% |
+| `internal/render` | Canvas, SceneCanvas (tile-parallel), Renderer using gogpu/gg | 96.5% |
 | `internal/layout` | Flex, Stack, Grid layout engines | 89.9% |
 
 ### MVP (Phase 1)
@@ -171,13 +171,24 @@ func main() {
 | `core/checkbox` | Toggleable checkbox with checked/unchecked/indeterminate states, signal bindings | 96%+ |
 | `core/radio` | Mutually exclusive radio group with vertical/horizontal layout, signal bindings | 96%+ |
 | `core/textfield` | Text input with cursor, selection, clipboard, validation, signal bindings | 96%+ |
+| `core/slider` | Slider: continuous/discrete, horizontal/vertical, drag+keyboard, signal bindings | 94.6% |
+| `core/dialog` | Modal dialog: backdrop overlay, action buttons, focus trapping, Alert/Confirm | 96.9% |
 | `core/dropdown` | Dropdown/select with overlay menu, keyboard navigation, signal bindings | 96%+ |
 | `overlay` | Overlay/popup stack, container, position helper | 95%+ |
-| `theme/material3` | Material Design 3 — theme (HCT color science) + 5 component painters | 97%+ |
+| `primitives` | Box, Text, Image, RepaintBoundary (pixel caching + tile-parallel scene.Scene) | 94.4% |
+| `theme/material3` | Material Design 3 — theme (HCT color science) + 7 component painters | 97%+ |
 | `focus` | Keyboard focus management with Tab/Shift+Tab navigation | 95.2% |
 | `internal/focus` | Internal focus manager implementation | 15.2% |
 
-**Total: ~55,000+ lines of code | 25 packages | 1,500+ tests | ~97% average coverage**
+### Phase 3 (In Progress)
+
+| Package | Description | Coverage |
+|---------|-------------|----------|
+| `animation` | Animation engine: tween, spring physics, CubicBezier, M3 motion tokens, Tween[T], Sequence/Parallel | 90.3% |
+| `core/scrollview` | Scrollable container: vertical/horizontal/both, wheel+keyboard+drag, PushClip/PushTransform, signal bindings | 96.5% |
+| `core/tabview` | Tabbed navigation: lazy content switching, closeable tabs, keyboard nav, Top/Bottom position, signal bindings | 92.1% |
+
+**Total: ~67,000+ lines of code | 30 packages | 2,100+ tests | ~97% average coverage**
 
 ---
 
@@ -191,12 +202,16 @@ func main() {
 │  Theme + Painters  │   (Planned)     │    (Planned)         │
 │  (Complete ✅)     │                 │                      │
 ├─────────────────────────────────────────────────────────────┤
-│  core/button/      │  docking/       │  animation/          │
-│  core/checkbox/    │  DockingHost    │  Animation, Spring   │
-│  core/radio/       │  (Phase 4)      │  (Phase 3)           │
+│  core/button/      │  animation/     │  docking/            │
+│  core/checkbox/    │  Tween, Spring  │  DockingHost         │
+│  core/radio/       │  M3 motion ✅   │  (Phase 4)           │
 │  core/textfield/   │                 │                      │
-│  core/dropdown/    │                 │                      │
-│  focus/ overlay/ ✅│                │                      │
+│  core/dropdown/    │  internal/      │                      │
+│  core/slider/      │  render/        │                      │
+│  core/dialog/      │  Canvas +       │                      │
+│  core/scrollview/  │  SceneCanvas    │                      │
+│  core/tabview/     │  (tile-parallel │                      │
+│  focus/ overlay/ ✅│   scene.Scene)  │                      │
 ├──────────────┬──────────────────────────────────────────────┤
 │  cdk/        │  Content[C] polymorphic pattern              │
 │  (Complete ✅)│  Headless behaviors (Phase 3)               │
@@ -293,6 +308,130 @@ primitives.Image(mySource).
     Cover().
     Rounded(24).
     Alt("User avatar")
+```
+
+### Slider
+
+```go
+// Basic slider
+s := slider.New(
+    slider.Min(0),
+    slider.Max(100),
+    slider.Value(50),
+    slider.OnChange(func(v float32) { fmt.Println("Value:", v) }),
+)
+
+// Discrete slider with step snapping and marks
+s := slider.New(
+    slider.Min(0), slider.Max(100), slider.Step(10),
+    slider.Marks([]slider.Mark{{Value: 0}, {Value: 50}, {Value: 100}}),
+    slider.PainterOpt(material3.SliderPainter{Theme: m3}),
+)
+
+// Two-way signal binding
+volume := state.NewSignal[float32](75)
+s := slider.New(
+    slider.Min(0), slider.Max(100),
+    slider.ValueSignal(volume),  // reads AND writes back on drag
+)
+```
+
+### Dialog
+
+```go
+// Simple alert dialog
+d := dialog.Alert("Error", "File not found.", func() { log.Println("dismissed") })
+d.Show(ctx)
+
+// Confirmation dialog
+d := dialog.Confirm("Delete?", "This cannot be undone.",
+    func() { log.Println("canceled") },
+    func() { deleteItem() },
+)
+d.Show(ctx)
+
+// Custom dialog with M3 painter
+d := dialog.New(
+    dialog.Title("Settings"),
+    dialog.Content(settingsWidget),
+    dialog.Actions(
+        dialog.Action{Label: "Cancel", Variant: dialog.VariantTextOnly},
+        dialog.Action{Label: "Save", Variant: dialog.VariantFilled, Default: true,
+            OnClick: func() { saveSettings() }},
+    ),
+    dialog.PainterOpt(material3.DialogPainter{Theme: m3}),
+)
+d.Show(ctx)
+```
+
+### Animation
+
+```go
+// Tween animation with M3 easing
+ctrl := animation.NewController()
+opacity := state.NewSignal[float32](0)
+animation.To(opacity, 1.0).
+    Duration(animation.DurationMedium2).
+    Ease(animation.M3Standard).
+    Start(ctrl)
+
+// Spring physics (critically damped)
+position := state.NewSignal[float32](0)
+animation.SpringTo(position, 200).
+    Stiffness(animation.StiffnessMedium).
+    DampingRatio(animation.DampingNoBouncy).
+    Start(ctrl)
+
+// Color tween (Flutter pattern: float32 engine + Tween[T])
+progress := state.NewSignal[float32](0)
+animation.To(progress, 1.0).Duration(300*time.Millisecond).Start(ctrl)
+colorTween := animation.NewColorTween(startColor, endColor)
+// in Draw: canvas.DrawRect(bounds, colorTween.At(progress.Get()))
+
+// Parallel composition
+animation.Parallel(
+    animation.To(opacity, 1.0).Duration(200*time.Millisecond),
+    animation.To(translateY, 0).Duration(300*time.Millisecond),
+).Start(ctrl)
+```
+
+### ScrollView
+
+```go
+// Basic vertical scrollview
+sv := scrollview.New(longContentWidget,
+    scrollview.DirectionOpt(scrollview.Vertical),
+    scrollview.ScrollbarOpt(scrollview.ScrollbarAuto),
+    scrollview.OnScroll(func(x, y float32) { fmt.Printf("scroll: %.0f\n", y) }),
+)
+
+// 2D scrollview with signal binding
+scrollY := state.NewSignal[float32](0)
+sv := scrollview.New(largeCanvas,
+    scrollview.DirectionOpt(scrollview.Both),
+    scrollview.ScrollYSignal(scrollY), // two-way binding
+    scrollview.PainterOpt(material3.ScrollbarPainter{Theme: m3}),
+)
+```
+
+### TabView
+
+```go
+// Basic tab view
+tv := tabview.New([]tabview.Tab{
+    {Label: "Profile", Content: profileWidget},
+    {Label: "Settings", Content: settingsWidget},
+    {Label: "About", Content: aboutWidget},
+}, tabview.OnSelect(func(idx int) { fmt.Println("Tab:", idx) }))
+
+// Closeable tabs with M3 painter and signal binding
+selected := state.NewSignal[int](0)
+tv := tabview.New(tabs,
+    tabview.Closeable(true),
+    tabview.SelectedSignalOpt(selected),
+    tabview.PainterOpt(material3.TabViewPainter{Theme: m3}),
+    tabview.OnClose(func(idx int) { removeDynamicTab(idx) }),
+)
 ```
 
 ### Reactive State
@@ -417,15 +556,21 @@ testApp.Window().Frame()  // processes layout + draw
 - [x] Event-driven rendering (0% CPU when idle)
 - [x] Reactive signal bindings for all widgets (TextSignal, CheckedSignal, SelectedSignal, DisabledSignal, ContentSignal)
 
-### Phase 3: Release Candidate
+### Phase 3: Release Candidate (In Progress)
 
+- [x] Retained-mode rendering: dirty tracking, DrawTree, DrawStats (SP1)
+- [x] RepaintBoundary: per-widget pixel caching (SP2)
+- [x] scene.Scene integration: tile-parallel rendering via SceneCanvas (SP3)
+- [x] Slider widget (continuous/discrete, horizontal/vertical, M3 painter)
+- [x] Dialog/Modal widget (backdrop, actions, focus trapping, M3 painter)
+- [x] Animation engine (Tween, Spring, CubicBezier, M3 motion tokens)
+- [x] ScrollView widget (vertical/horizontal/both, wheel+keyboard+drag)
+- [x] TabView widget (lazy content, closeable tabs, keyboard nav)
+- [ ] SplitView
+- [ ] Popover/Tooltip
 - [ ] Virtualized lists and grids
-- [ ] Animation engine (Spring, Tween)
-- [ ] Slider, Progress indicators
-- [ ] Dialog/Modal, Popover/Tooltip
-- [ ] ScrollView, TabView, SplitView
+- [ ] Progress indicators
 - [ ] Typography and Icon systems
-- [ ] Dirty region tracking, layer compositing
 
 ### Phase 4: Production (v1.0)
 
