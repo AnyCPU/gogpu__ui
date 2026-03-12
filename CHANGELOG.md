@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Animation Engine — TASK-UI-024)
+- **Animation engine** (`animation/`) — comprehensive animation system with:
+  - **Tween animations**: Builder pattern `To(signal, target).Duration(d).Ease(e).Start(ctrl)`.
+    Delay, repeat (finite/infinite), auto-reverse, OnDone callback.
+  - **Spring physics**: Damped harmonic oscillator with sub-stepped Euler integration.
+    `SpringTo(signal, target).Stiffness(s).DampingRatio(d).Start(ctrl)`.
+    Dual-threshold convergence (restDelta + restSpeed). Velocity preservation on retarget.
+  - **CubicBezier easing**: 11-sample table + Newton-Raphson + bisection fallback (~10ns/eval).
+  - **ThreePointCubic**: Exact M3 Emphasized curve (two joined cubic segments).
+  - **M3 motion tokens**: 7 easing curves, 16 duration tokens (50ms-1000ms),
+    4 damping ratios, 4 stiffness presets (from Jetpack Compose).
+  - **Tween[T] evaluator**: Generic type mapping (Color, Point, Size) from float32 progress.
+    Flutter pattern: engine drives float32, Tween maps to any type.
+  - **Composition**: Sequence (chain) and Parallel for multi-animation orchestration.
+  - **Controller**: Auto-cancel per signal, Tick(dt), HasActive(), CancelAll().
+    Spring velocity transfer on auto-cancel. 0% CPU when idle.
+  - 73 tests, 90.3% coverage, ~2,800 LOC total.
+
 ### Added (Dialog Widget — TASK-UI-014)
 - **Dialog/Modal widget** (`core/dialog/`) — modal dialog with backdrop overlay,
   title, optional content widget, and action buttons. Dismissible via backdrop

@@ -180,7 +180,13 @@ func main() {
 | `focus` | Keyboard focus management with Tab/Shift+Tab navigation | 95.2% |
 | `internal/focus` | Internal focus manager implementation | 15.2% |
 
-**Total: ~60,000+ lines of code | 27 packages | 1,700+ tests | ~97% average coverage**
+### Phase 3 (In Progress)
+
+| Package | Description | Coverage |
+|---------|-------------|----------|
+| `animation` | Animation engine: tween, spring physics, CubicBezier, M3 motion tokens, Tween[T], Sequence/Parallel | 90.3% |
+
+**Total: ~63,000+ lines of code | 28 packages | 1,800+ tests | ~97% average coverage**
 
 ---
 
@@ -195,8 +201,8 @@ func main() {
 │  (Complete ✅)     │                 │                      │
 ├─────────────────────────────────────────────────────────────┤
 │  core/button/      │  docking/       │  animation/          │
-│  core/checkbox/    │  DockingHost    │  Animation, Spring   │
-│  core/radio/       │  (Phase 4)      │  (Phase 3)           │
+│  core/checkbox/    │  DockingHost    │  Tween, Spring, M3   │
+│  core/radio/       │  (Phase 4)      │  (Complete ✅)       │
 │  core/textfield/   │                 │                      │
 │  core/dropdown/    │                 │                      │
 │  core/slider/      │                 │                      │
@@ -352,6 +358,37 @@ d := dialog.New(
     dialog.PainterOpt(material3.DialogPainter{Theme: m3}),
 )
 d.Show(ctx)
+```
+
+### Animation
+
+```go
+// Tween animation with M3 easing
+ctrl := animation.NewController()
+opacity := state.NewSignal[float32](0)
+animation.To(opacity, 1.0).
+    Duration(animation.DurationMedium2).
+    Ease(animation.M3Standard).
+    Start(ctrl)
+
+// Spring physics (critically damped)
+position := state.NewSignal[float32](0)
+animation.SpringTo(position, 200).
+    Stiffness(animation.StiffnessMedium).
+    DampingRatio(animation.DampingNoBouncy).
+    Start(ctrl)
+
+// Color tween (Flutter pattern: float32 engine + Tween[T])
+progress := state.NewSignal[float32](0)
+animation.To(progress, 1.0).Duration(300*time.Millisecond).Start(ctrl)
+colorTween := animation.NewColorTween(startColor, endColor)
+// in Draw: canvas.DrawRect(bounds, colorTween.At(progress.Get()))
+
+// Parallel composition
+animation.Parallel(
+    animation.To(opacity, 1.0).Duration(200*time.Millisecond),
+    animation.To(translateY, 0).Duration(300*time.Millisecond),
+).Start(ctrl)
 ```
 
 ### Reactive State

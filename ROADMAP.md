@@ -285,6 +285,7 @@ v1.0.0  → Production (when ready)
 | ~~TASK-UI-057 SP2~~ | RepaintBoundary: per-widget pixel caching | ✅ Done |
 | ~~TASK-UI-015~~ | Slider Widget (continuous/discrete, H/V, M3 painter) | ✅ Done |
 | ~~TASK-UI-026~~ | Dialog/Modal (backdrop overlay, action buttons, focus trapping, M3 painter) | ✅ Done |
+| ~~TASK-UI-024~~ | Animation Engine (tween, spring, CubicBezier, M3 tokens, Tween[T], Sequence/Parallel) | ✅ Done |
 
 **Remaining:**
 
@@ -292,7 +293,6 @@ v1.0.0  → Production (when ready)
 |------|-------------|-----|----------|
 | TASK-UI-057 SP3 | scene.Scene integration (tile-parallel rendering) | ~700 | P0 |
 | TASK-UI-028 | ScrollView | ~800 | P1 |
-| TASK-UI-024 | Animation Engine | ~1,200 | P0 |
 | TASK-UI-029 | TabView | ~500 | P1 |
 | TASK-UI-016 | Progress Indicators | ~500 | P2 |
 | TASK-UI-021 | VirtualizedList | ~1,500 | P0 |
@@ -307,6 +307,7 @@ v1.0.0  → Production (when ready)
 - Rendering optimizations (dirty regions, RepaintBoundary, scene integration)
 - Animation system (Spring, Tween)
 - Additional widgets (Slider ✅, Dialog ✅, Progress, Tooltip)
+- Animation system ✅ (Tween, Spring, M3 motion, CubicBezier, Sequence/Parallel)
 - Containers (ScrollView, TabView, SplitView)
 - Virtualization for large datasets
 
