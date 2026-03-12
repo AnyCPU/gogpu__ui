@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (Slider Widget — TASK-UI-015)
+- **Slider widget** (`core/slider/`) — draggable slider for selecting numeric values
+  within a range. Continuous and discrete (step snapping) modes. Horizontal and
+  vertical orientations. Mouse drag, click-on-track, full keyboard navigation
+  (arrows, Home/End, PgUp/PgDn). Two-way ValueSignal binding, DisabledSignal.
+  Pluggable Painter pattern with DefaultPainter fallback. 94.6% test coverage.
+- **Material 3 SliderPainter** (`theme/material3/slider.go`) — M3 slider rendering
+  with HCT-derived colors, state modifiers (hover/drag/focus/disabled), tick marks
+
+### Added (Retained-Mode Rendering — TASK-UI-057 Sub-Phase 2)
+- **RepaintBoundary widget** (`primitives/repaint_boundary.go`) — caches child
+  subtree as CPU-side pixel buffer (image.RGBA). When the subtree is clean, the
+  cached image is composited directly instead of re-rendering descendants.
+  Flutter RepaintBoundary pattern for explicit opt-in caching boundaries.
+- **DrawImage on Canvas** — `widget.Canvas.DrawImage(img, at)` for blitting cached
+  pixel buffers. Used by RepaintBoundary for cache compositing.
+- **CachedWidgets in DrawStats** — `widget.DrawStats.CachedWidgets` counter tracks
+  how many widgets were served from cache during draw traversal.
+
 ### Added (Professional Font — Inter)
 - **Inter font for UI text** — replaced Go fonts (goregular/gobold) with
   Inter Regular (400) and Bold (700). Inter is designed specifically for

@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/gogpu/ui/actions"><img src="https://github.com/gogpu/ui/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/gogpu/ui"><img src="https://img.shields.io/badge/status-Phase_2_Beta-brightgreen" alt="Status"></a>
+  <a href="https://github.com/gogpu/ui"><img src="https://img.shields.io/badge/status-Phase_3_RC-blue" alt="Status"></a>
   <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.25+-00ADD8?logo=go" alt="Go Version"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License"></a>
   <a href="https://github.com/gogpu/gogpu/stargazers"><img src="https://img.shields.io/github/stars/gogpu/gogpu?style=flat&labelColor=555&color=yellow" alt="Stars"></a>
@@ -171,13 +171,15 @@ func main() {
 | `core/checkbox` | Toggleable checkbox with checked/unchecked/indeterminate states, signal bindings | 96%+ |
 | `core/radio` | Mutually exclusive radio group with vertical/horizontal layout, signal bindings | 96%+ |
 | `core/textfield` | Text input with cursor, selection, clipboard, validation, signal bindings | 96%+ |
+| `core/slider` | Slider: continuous/discrete, horizontal/vertical, drag+keyboard, signal bindings | 94.6% |
 | `core/dropdown` | Dropdown/select with overlay menu, keyboard navigation, signal bindings | 96%+ |
 | `overlay` | Overlay/popup stack, container, position helper | 95%+ |
-| `theme/material3` | Material Design 3 — theme (HCT color science) + 5 component painters | 97%+ |
+| `primitives` | Box, Text, Image, RepaintBoundary (per-widget pixel caching) | 94.4% |
+| `theme/material3` | Material Design 3 — theme (HCT color science) + 6 component painters | 97%+ |
 | `focus` | Keyboard focus management with Tab/Shift+Tab navigation | 95.2% |
 | `internal/focus` | Internal focus manager implementation | 15.2% |
 
-**Total: ~55,000+ lines of code | 25 packages | 1,500+ tests | ~97% average coverage**
+**Total: ~58,000+ lines of code | 26 packages | 1,600+ tests | ~97% average coverage**
 
 ---
 
@@ -293,6 +295,32 @@ primitives.Image(mySource).
     Cover().
     Rounded(24).
     Alt("User avatar")
+```
+
+### Slider
+
+```go
+// Basic slider
+s := slider.New(
+    slider.Min(0),
+    slider.Max(100),
+    slider.Value(50),
+    slider.OnChange(func(v float32) { fmt.Println("Value:", v) }),
+)
+
+// Discrete slider with step snapping and marks
+s := slider.New(
+    slider.Min(0), slider.Max(100), slider.Step(10),
+    slider.Marks([]slider.Mark{{Value: 0}, {Value: 50}, {Value: 100}}),
+    slider.PainterOpt(material3.SliderPainter{Theme: m3}),
+)
+
+// Two-way signal binding
+volume := state.NewSignal[float32](75)
+s := slider.New(
+    slider.Min(0), slider.Max(100),
+    slider.ValueSignal(volume),  // reads AND writes back on drag
+)
 ```
 
 ### Reactive State
@@ -417,15 +445,18 @@ testApp.Window().Frame()  // processes layout + draw
 - [x] Event-driven rendering (0% CPU when idle)
 - [x] Reactive signal bindings for all widgets (TextSignal, CheckedSignal, SelectedSignal, DisabledSignal, ContentSignal)
 
-### Phase 3: Release Candidate
+### Phase 3: Release Candidate (In Progress)
 
-- [ ] Virtualized lists and grids
-- [ ] Animation engine (Spring, Tween)
-- [ ] Slider, Progress indicators
-- [ ] Dialog/Modal, Popover/Tooltip
+- [x] Retained-mode rendering: dirty tracking, DrawTree, DrawStats (SP1)
+- [x] RepaintBoundary: per-widget pixel caching (SP2)
+- [x] Slider widget (continuous/discrete, horizontal/vertical, M3 painter)
+- [ ] Retained-mode rendering: scene.Scene integration (SP3)
 - [ ] ScrollView, TabView, SplitView
+- [ ] Animation engine (Spring, Tween)
+- [ ] Dialog/Modal, Popover/Tooltip
+- [ ] Virtualized lists and grids
+- [ ] Progress indicators
 - [ ] Typography and Icon systems
-- [ ] Dirty region tracking, layer compositing
 
 ### Phase 4: Production (v1.0)
 
