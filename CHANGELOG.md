@@ -57,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   were released between frames, preventing drag state from sticking
 
 ### Changed (Dependencies)
-- **gg** v0.35.3 → **v0.36.3** (GPU GlyphMask cache, RoundRectShape SDF, scene clip support, font hinting, ClearType LCD subpixel, GPU scissor rect clipping)
+- **gg** v0.35.3 → **v0.36.4** (GPU GlyphMask cache, RoundRectShape SDF, scene clip support, font hinting, ClearType LCD subpixel, GPU scissor rect clipping, GPU RRect SDF clip via ClipRoundRect)
 - **golang.org/x/image** v0.36.0 → **v0.37.0**
 - **golang.org/x/text** v0.34.0 → **v0.35.0**
 - **go-text/typesetting** v0.3.3 → **v0.3.4**

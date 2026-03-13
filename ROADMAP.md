@@ -361,7 +361,7 @@ v1.0.0  → Production (when ready)
 
 | Dependency | Version | Purpose | Status |
 |------------|---------|---------|--------|
-| gogpu/gg | v0.36.3 | 2D rendering | ✅ Integrated |
+| gogpu/gg | v0.36.4 | 2D rendering | ✅ Integrated |
 | gogpu/gpucontext | v0.9.0 | Shared interfaces | ✅ Integrated |
 | coregx/signals | v0.1.0 | State management | ✅ Integrated |
 | golang.org/x/image | v0.37.0 | Inter font (standard) | ✅ Integrated |
