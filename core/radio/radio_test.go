@@ -974,6 +974,7 @@ func (c *recordingCanvas) DrawText(text string, bounds geometry.Rect, fontSize f
 
 func (c *recordingCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *recordingCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *recordingCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *recordingCanvas) PopClip()                                  {}
 func (c *recordingCanvas) PushTransform(_ geometry.Point)            {}
 func (c *recordingCanvas) PopTransform()                             {}
@@ -996,6 +997,7 @@ func (c *mockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.Col
 
 func (c *mockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *mockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *mockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *mockCanvas) PopClip()                                  {}
 func (c *mockCanvas) PushTransform(_ geometry.Point)            {}
 func (c *mockCanvas) PopTransform()                             {}

@@ -982,6 +982,7 @@ func (c *internalRecordingCanvas) DrawText(text string, bounds geometry.Rect, fo
 
 func (c *internalRecordingCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *internalRecordingCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *internalRecordingCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *internalRecordingCanvas) PopClip()                                  {}
 func (c *internalRecordingCanvas) PushTransform(_ geometry.Point)            {}
 func (c *internalRecordingCanvas) PopTransform()                             {}

@@ -301,7 +301,17 @@ func (c *SceneCanvas) PushClip(r geometry.Rect) {
 	c.sc.PushClip(clipShape)
 }
 
-// PopClip removes the most recently pushed clipping rectangle.
+// PushClipRoundRect pushes a rounded rectangle clipping region.
+// SceneCanvas falls back to rectangular clip (scene.Scene does not
+// yet support rounded clip shapes).
+func (c *SceneCanvas) PushClipRoundRect(r geometry.Rect, radius float32) {
+	// TODO: use rounded rect clip shape when scene.Scene supports it.
+	// For now, fall back to rectangular clip.
+	_ = radius
+	c.PushClip(r)
+}
+
+// PopClip removes the most recently pushed clipping region.
 func (c *SceneCanvas) PopClip() {
 	if len(c.clipStack) == 0 {
 		return

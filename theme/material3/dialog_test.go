@@ -217,6 +217,7 @@ func (c *dialogMockCanvas) DrawText(text string, bounds geometry.Rect, fontSize 
 
 func (c *dialogMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *dialogMockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *dialogMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *dialogMockCanvas) PopClip()                                  {}
 func (c *dialogMockCanvas) PushTransform(_ geometry.Point)            {}
 func (c *dialogMockCanvas) PopTransform()                             {}

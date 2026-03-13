@@ -253,6 +253,7 @@ func (c *recordingCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widge
 }
 func (c *recordingCanvas) DrawImage(_ image.Image, _ geometry.Point) { c.drawCount++ }
 func (c *recordingCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *recordingCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *recordingCanvas) PopClip()                                  {}
 func (c *recordingCanvas) PushTransform(_ geometry.Point)            {}
 func (c *recordingCanvas) PopTransform()                             {}

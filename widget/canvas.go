@@ -81,9 +81,15 @@ type Canvas interface {
 	// intersected with any parent clip rectangles.
 	PushClip(r geometry.Rect)
 
-	// PopClip removes the most recently pushed clipping rectangle.
+	// PushClipRoundRect pushes a rounded rectangle clipping region.
 	//
-	// Must be called for each PushClip call.
+	// All subsequent drawing operations will be clipped to this rounded
+	// rectangle. Uses GPU SDF-based clipping when available (gg.ClipRoundRect).
+	PushClipRoundRect(r geometry.Rect, radius float32)
+
+	// PopClip removes the most recently pushed clipping region.
+	//
+	// Must be called for each PushClip or PushClipRoundRect call.
 	PopClip()
 
 	// PushTransform pushes a translation transform onto the transform stack.

@@ -443,6 +443,7 @@ func (m *mockCanvas) DrawLine(geometry.Point, geometry.Point, widget.Color, floa
 func (m *mockCanvas) DrawText(string, geometry.Rect, float32, widget.Color, bool, float32) {}
 func (m *mockCanvas) DrawImage(image.Image, geometry.Point)                                {}
 func (m *mockCanvas) PushClip(geometry.Rect)                                               {}
+func (m *mockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (m *mockCanvas) PopClip()                                                             {}
 func (m *mockCanvas) PushTransform(geometry.Point)                                         {}
 func (m *mockCanvas) PopTransform()                                                        {}

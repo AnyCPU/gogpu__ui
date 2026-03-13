@@ -1597,6 +1597,7 @@ func (m *mockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.Col
 }
 func (m *mockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (m *mockCanvas) PushClip(_ geometry.Rect)                  {}
+func (m *mockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (m *mockCanvas) PopClip()                                  {}
 func (m *mockCanvas) PushTransform(_ geometry.Point)            {}
 func (m *mockCanvas) PopTransform()                             {}

@@ -1857,6 +1857,7 @@ func (c *internalMockCanvas) DrawText(text string, bounds geometry.Rect, fontSiz
 
 func (c *internalMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *internalMockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *internalMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *internalMockCanvas) PopClip()                                  {}
 func (c *internalMockCanvas) PushTransform(_ geometry.Point)            {}
 func (c *internalMockCanvas) PopTransform()                             {}

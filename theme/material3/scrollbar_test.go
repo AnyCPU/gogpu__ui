@@ -167,6 +167,7 @@ func (c *scrollbarMockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ w
 }
 func (c *scrollbarMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *scrollbarMockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *scrollbarMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *scrollbarMockCanvas) PopClip()                                  {}
 func (c *scrollbarMockCanvas) PushTransform(_ geometry.Point)            {}
 func (c *scrollbarMockCanvas) PopTransform()                             {}

@@ -251,9 +251,27 @@ func (c *Canvas) PushClip(r geometry.Rect) {
 		float64(clip.Width()), float64(clip.Height()))
 }
 
-// PopClip removes the most recently pushed clipping rectangle.
+// PushClipRoundRect pushes a rounded rectangle clipping region.
 //
-// Must be called for each PushClip call.
+// Uses gg.ClipRoundRect which activates GPU SDF-based clipping for
+// rounded rectangles. All subsequent draw operations will be clipped
+// to the rounded rect shape.
+func (c *Canvas) PushClipRoundRect(r geometry.Rect, radius float32) {
+	r = c.applyTransform(r)
+	c.clipStack = append(c.clipStack, c.currentClip)
+	c.currentClip = c.currentClip.Intersection(r)
+
+	c.dc.Push()
+	c.dc.ClipRoundRect(
+		float64(r.Min.X), float64(r.Min.Y),
+		float64(r.Width()), float64(r.Height()),
+		float64(radius),
+	)
+}
+
+// PopClip removes the most recently pushed clipping region.
+//
+// Must be called for each PushClip or PushClipRoundRect call.
 func (c *Canvas) PopClip() {
 	if len(c.clipStack) == 0 {
 		return

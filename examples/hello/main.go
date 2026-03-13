@@ -200,12 +200,10 @@ func buildUI() *primitives.BoxWidget {
 
 		// Wrap ListView in a Box with explicit height to ensure
 		// it gets enough space in the vertical stack layout.
-		// Small padding (2px) prevents item highlights from bleeding
-		// past rounded corners — GPU scissor rect is rectangular and
-		// cannot clip to curves. Proper fix: stencil-based clip path in gg.
+		// Box.Draw uses PushClipRoundRect (GPU SDF clip) to clip children
+		// to rounded corners — no padding workaround needed.
 		primitives.Box(buildListView()).
 			Height(300).
-			PaddingXY(2, 2).
 			Rounded(8).
 			Background(widget.RGBA8(250, 250, 250, 255)).
 			BorderStyle(1, widget.RGBA8(218, 218, 218, 255)),

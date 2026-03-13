@@ -59,6 +59,7 @@ func (c *stubCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *stubCanvas) PushClip(r geometry.Rect) {
 	c.clipStack = append(c.clipStack, r)
 }
+func (c *stubCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 
 func (c *stubCanvas) PopClip() {
 	c.clipsPopped++

@@ -351,6 +351,7 @@ func (c *sliderMockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widg
 }
 func (c *sliderMockCanvas) DrawImage(_ image.Image, _ geometry.Point) { c.drawCount++ }
 func (c *sliderMockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *sliderMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *sliderMockCanvas) PopClip()                                  {}
 func (c *sliderMockCanvas) PushTransform(_ geometry.Point)            {}
 func (c *sliderMockCanvas) PopTransform()                             {}

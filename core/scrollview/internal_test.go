@@ -1968,6 +1968,7 @@ func (c *internalMockCanvas) PushClip(r geometry.Rect) {
 	c.pushClipCount++
 	c.lastClipRect = r
 }
+func (c *internalMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 
 func (c *internalMockCanvas) PopClip() {
 	c.popClipCount++

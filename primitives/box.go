@@ -257,15 +257,15 @@ func (b *BoxWidget) Draw(ctx widget.Context, canvas widget.Canvas) {
 
 	// Clip children when the box has a border or rounded corners,
 	// so content doesn't overflow the visual boundary.
-	//
-	// KNOWN LIMITATION: GPU scissor rect is rectangular — it cannot clip
-	// to rounded corners. Child content (e.g. list item highlights) may
-	// bleed past rounded border curves at corners. Workaround: add small
-	// padding (2-4px) so content doesn't reach the corner radius area.
-	// Proper fix requires stencil-based or alpha-mask clip path in gg.
+	// Uses PushClipRoundRect for rounded corners (GPU SDF clip),
+	// falls back to rectangular PushClip otherwise.
 	clipChildren := !b.style.Border.IsZero() || b.style.Radius > 0
 	if clipChildren {
-		canvas.PushClip(bounds)
+		if b.style.Radius > 0 {
+			canvas.PushClipRoundRect(bounds, b.style.Radius)
+		} else {
+			canvas.PushClip(bounds)
+		}
 	}
 
 	// Draw children with transform offset for this box's position.

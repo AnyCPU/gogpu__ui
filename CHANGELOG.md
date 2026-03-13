@@ -38,6 +38,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Border z-order** — border is now drawn AFTER children so it renders on top
   of content instead of being obscured by child widgets
 
+### Added (Canvas / GPU Clipping)
+- **PushClipRoundRect** — new `widget.Canvas` interface method for GPU SDF-based
+  rounded rectangle clipping. `Canvas` implementation delegates to `gg.ClipRoundRect()`;
+  `SceneCanvas` falls back to rectangular clip (scene.Scene support pending gg#202).
+  `Box.Draw` automatically uses `PushClipRoundRect` when `radius > 0`, properly
+  clipping child content to rounded corners without padding workarounds
+
 ### Fixed (Canvas / GPU Clipping)
 - **PushClip with gg.ClipRect** — Canvas.PushClip now sets clip rect on the
   underlying gg.Context via ClipRect(), enabling hardware GPU scissor rect

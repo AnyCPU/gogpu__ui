@@ -250,6 +250,7 @@ func (c *tabMockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.
 
 func (c *tabMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *tabMockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *tabMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 func (c *tabMockCanvas) PopClip()                                  {}
 func (c *tabMockCanvas) PushTransform(_ geometry.Point)            {}
 func (c *tabMockCanvas) PopTransform()                             {}
