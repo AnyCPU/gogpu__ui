@@ -248,8 +248,9 @@ func (c *tabMockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32)
 func (c *tabMockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.Color, _ bool, _ float32) {
 }
 
-func (c *tabMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
-func (c *tabMockCanvas) PushClip(_ geometry.Rect)                  {}
-func (c *tabMockCanvas) PopClip()                                  {}
-func (c *tabMockCanvas) PushTransform(_ geometry.Point)            {}
-func (c *tabMockCanvas) PopTransform()                             {}
+func (c *tabMockCanvas) DrawImage(_ image.Image, _ geometry.Point)    {}
+func (c *tabMockCanvas) PushClip(_ geometry.Rect)                     {}
+func (c *tabMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
+func (c *tabMockCanvas) PopClip()                                     {}
+func (c *tabMockCanvas) PushTransform(_ geometry.Point)               {}
+func (c *tabMockCanvas) PopTransform()                                {}

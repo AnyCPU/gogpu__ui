@@ -59,6 +59,7 @@ func (c *stubCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 func (c *stubCanvas) PushClip(r geometry.Rect) {
 	c.clipStack = append(c.clipStack, r)
 }
+func (c *stubCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 
 func (c *stubCanvas) PopClip() {
 	c.clipsPopped++
@@ -236,7 +237,7 @@ func TestWheelEvent_VerticalScroll(t *testing.T) {
 	// Simulate scroll down.
 	wheel := &event.WheelEvent{
 		Position: geometry.Pt(100, 200),
-		Delta:    geometry.Pt(0, -1),
+		Delta:    geometry.Pt(0, 1),
 	}
 
 	consumed := sv.Event(ctx, wheel)
@@ -262,7 +263,7 @@ func TestWheelEvent_HorizontalBlocked(t *testing.T) {
 
 	wheel := &event.WheelEvent{
 		Position: geometry.Pt(100, 200),
-		Delta:    geometry.Pt(-1, 0),
+		Delta:    geometry.Pt(1, 0),
 	}
 
 	consumed := sv.Event(ctx, wheel)
@@ -279,7 +280,7 @@ func TestWheelEvent_OutsideBounds(t *testing.T) {
 
 	wheel := &event.WheelEvent{
 		Position: geometry.Pt(500, 500), // outside
-		Delta:    geometry.Pt(0, -1),
+		Delta:    geometry.Pt(0, 1),
 	}
 
 	if sv.Event(ctx, wheel) {
@@ -445,7 +446,7 @@ func TestSignalBinding_ScrollY(t *testing.T) {
 	// Scroll via wheel.
 	wheel := &event.WheelEvent{
 		Position: geometry.Pt(100, 200),
-		Delta:    geometry.Pt(0, -1),
+		Delta:    geometry.Pt(0, 1),
 	}
 	sv.Event(ctx, wheel)
 
@@ -470,7 +471,7 @@ func TestSignalBinding_ScrollX(t *testing.T) {
 
 	wheel := &event.WheelEvent{
 		Position: geometry.Pt(100, 100),
-		Delta:    geometry.Pt(-1, 0),
+		Delta:    geometry.Pt(1, 0),
 	}
 	sv.Event(ctx, wheel)
 
@@ -501,7 +502,7 @@ func TestOnScroll_CallbackFired(t *testing.T) {
 
 	wheel := &event.WheelEvent{
 		Position: geometry.Pt(100, 200),
-		Delta:    geometry.Pt(0, -1),
+		Delta:    geometry.Pt(0, 1),
 	}
 	sv.Event(ctx, wheel)
 

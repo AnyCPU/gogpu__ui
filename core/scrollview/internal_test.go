@@ -464,9 +464,9 @@ func TestWheelEvent_ScrollDown(t *testing.T) {
 	sv.Layout(ctx, constraints)
 	sv.SetBounds(geometry.NewRect(0, 0, 200, 300))
 
-	// Scroll down (negative delta Y).
+	// Scroll down (positive delta Y).
 	e := event.NewWheelEvent(
-		geometry.Pt(0, -1),
+		geometry.Pt(0, 1),
 		geometry.Pt(100, 150),
 		geometry.Pt(100, 150),
 		0,
@@ -492,9 +492,9 @@ func TestWheelEvent_ScrollUp(t *testing.T) {
 	sv.Layout(ctx, constraints)
 	sv.SetBounds(geometry.NewRect(0, 0, 200, 300))
 
-	// Scroll up (positive delta Y).
+	// Scroll up (negative delta Y).
 	e := event.NewWheelEvent(
-		geometry.Pt(0, 1),
+		geometry.Pt(0, -1),
 		geometry.Pt(100, 150),
 		geometry.Pt(100, 150),
 		0,
@@ -520,7 +520,7 @@ func TestWheelEvent_ClampToZero(t *testing.T) {
 
 	// Scroll up more than current offset.
 	e := event.NewWheelEvent(
-		geometry.Pt(0, 10), // 10 ticks up
+		geometry.Pt(0, -10), // 10 ticks up
 		geometry.Pt(100, 150),
 		geometry.Pt(100, 150),
 		0,
@@ -545,7 +545,7 @@ func TestWheelEvent_ClampToMax(t *testing.T) {
 
 	// Scroll down more than remaining space.
 	e := event.NewWheelEvent(
-		geometry.Pt(0, -100),
+		geometry.Pt(0, 100),
 		geometry.Pt(100, 150),
 		geometry.Pt(100, 150),
 		0,
@@ -569,9 +569,9 @@ func TestWheelEvent_HorizontalDirection(t *testing.T) {
 	sv.Layout(ctx, constraints)
 	sv.SetBounds(geometry.NewRect(0, 0, 300, 200))
 
-	// Horizontal scroll.
+	// Horizontal scroll right (positive delta X).
 	e := event.NewWheelEvent(
-		geometry.Pt(-1, 0),
+		geometry.Pt(1, 0),
 		geometry.Pt(100, 100),
 		geometry.Pt(100, 100),
 		0,
@@ -644,7 +644,7 @@ func TestWheelEvent_CustomScrollStep(t *testing.T) {
 	sv.SetBounds(geometry.NewRect(0, 0, 200, 300))
 
 	e := event.NewWheelEvent(
-		geometry.Pt(0, -1),
+		geometry.Pt(0, 1),
 		geometry.Pt(100, 150),
 		geometry.Pt(100, 150),
 		0,
@@ -888,9 +888,9 @@ func TestScrollYSignal_TwoWay(t *testing.T) {
 	sv.Layout(ctx, constraints)
 	sv.SetBounds(geometry.NewRect(0, 0, 200, 300))
 
-	// User scrolls -> signal updated.
+	// User scrolls down -> signal updated.
 	e := event.NewWheelEvent(
-		geometry.Pt(0, -1),
+		geometry.Pt(0, 1),
 		geometry.Pt(100, 150),
 		geometry.Pt(100, 150),
 		0,
@@ -919,9 +919,9 @@ func TestScrollXSignal_TwoWay(t *testing.T) {
 	sv.Layout(ctx, constraints)
 	sv.SetBounds(geometry.NewRect(0, 0, 300, 200))
 
-	// User scrolls horizontally.
+	// User scrolls right.
 	e := event.NewWheelEvent(
-		geometry.Pt(-1, 0),
+		geometry.Pt(1, 0),
 		geometry.Pt(100, 100),
 		geometry.Pt(100, 100),
 		0,
@@ -948,7 +948,7 @@ func TestOnScroll_Callback(t *testing.T) {
 	sv.SetBounds(geometry.NewRect(0, 0, 200, 300))
 
 	e := event.NewWheelEvent(
-		geometry.Pt(0, -1),
+		geometry.Pt(0, 1),
 		geometry.Pt(100, 150),
 		geometry.Pt(100, 150),
 		0,
@@ -1626,6 +1626,7 @@ func TestMouseMove_Dragging(t *testing.T) {
 
 	me := &event.MouseEvent{
 		MouseType: event.MouseMove,
+		Buttons:   event.ButtonStateLeft,
 		Position:  geometry.Pt(195, 100), // 50px delta
 	}
 
@@ -1721,6 +1722,7 @@ func TestMouseMove_HorizontalDrag(t *testing.T) {
 
 	me := &event.MouseEvent{
 		MouseType: event.MouseMove,
+		Buttons:   event.ButtonStateLeft,
 		Position:  geometry.Pt(100, 195), // 50px delta
 	}
 
@@ -1966,6 +1968,7 @@ func (c *internalMockCanvas) PushClip(r geometry.Rect) {
 	c.pushClipCount++
 	c.lastClipRect = r
 }
+func (c *internalMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 
 func (c *internalMockCanvas) PopClip() {
 	c.popClipCount++

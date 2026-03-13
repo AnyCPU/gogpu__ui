@@ -47,6 +47,16 @@
 
 ---
 
+## Screenshot
+
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/f67636bc-7426-4865-9269-11e2a81124ad" alt="gogpu/ui Widget Demo" width="600" />
+</p>
+
+<p align="center"><em>examples/hello — Checkboxes, Radio Buttons, ListView (1000 items), Material Design 3</em></p>
+
+---
+
 ## Quick Start
 
 > **Important:** The gogpu ecosystem is **pure Go with zero CGO**. You must set `CGO_ENABLED=0` (the Go default) — do **not** enable CGO.
@@ -176,7 +186,7 @@ func main() {
 | `core/dropdown` | Dropdown/select with overlay menu, keyboard navigation, signal bindings | 96%+ |
 | `overlay` | Overlay/popup stack, container, position helper | 95%+ |
 | `primitives` | Box, Text, Image, RepaintBoundary (pixel caching + tile-parallel scene.Scene) | 94.4% |
-| `theme/material3` | Material Design 3 — theme (HCT color science) + 7 component painters | 97%+ |
+| `theme/material3` | Material Design 3 — theme (HCT color science) + 10 component painters | 97%+ |
 | `focus` | Keyboard focus management with Tab/Shift+Tab navigation | 95.2% |
 | `internal/focus` | Internal focus manager implementation | 15.2% |
 
@@ -187,8 +197,9 @@ func main() {
 | `animation` | Animation engine: tween, spring physics, CubicBezier, M3 motion tokens, Tween[T], Sequence/Parallel | 90.3% |
 | `core/scrollview` | Scrollable container: vertical/horizontal/both, wheel+keyboard+drag, PushClip/PushTransform, signal bindings | 96.5% |
 | `core/tabview` | Tabbed navigation: lazy content switching, closeable tabs, keyboard nav, Top/Bottom position, signal bindings | 92.1% |
+| `core/listview` | Virtualized list: fixed-height items, recycling, single/multi selection, keyboard nav, M3 painter | 96%+ |
 
-**Total: ~67,000+ lines of code | 30 packages | 2,100+ tests | ~97% average coverage**
+**Total: ~84,000+ lines of code | 31 packages | 2,276+ tests | ~97% average coverage**
 
 ---
 
@@ -257,7 +268,7 @@ gg → wgpu → naga                   ← internal to gg
 
 | Example | Description |
 |---------|-------------|
-| [`examples/hello`](examples/hello) | Full demo: checkbox, radio, button, event-driven GPU rendering |
+| [`examples/hello`](examples/hello) | Full demo: checkbox, radio, ListView (1000 items), M3 theme, event-driven GPU rendering |
 | [`examples/signals`](examples/signals) | Reactive signals: TextSignal, ContentSignal, CheckedSignal, SelectedSignal, DisabledSignal |
 
 Run any example:
@@ -550,7 +561,7 @@ testApp.Window().Frame()  // processes layout + draw
 - [x] TextField widget (cursor, selection, clipboard, validation)
 - [x] Dropdown/Select widget (overlay menu, keyboard nav, scroll)
 - [x] Overlay infrastructure (stack, container, position)
-- [x] Material Design 3 theme (HCT color science, 5 painters)
+- [x] Material Design 3 theme (HCT color science, 10 painters)
 - [x] Keyboard navigation (focus management, Tab/Shift+Tab, shortcuts)
 - [x] ThemeScope (theme override for widget subtrees)
 - [x] Event-driven rendering (0% CPU when idle)
@@ -566,6 +577,7 @@ testApp.Window().Frame()  // processes layout + draw
 - [x] Animation engine (Tween, Spring, CubicBezier, M3 motion tokens)
 - [x] ScrollView widget (vertical/horizontal/both, wheel+keyboard+drag)
 - [x] TabView widget (lazy content, closeable tabs, keyboard nav)
+- [x] ListView widget (virtualized list, recycling, single/multi selection, M3 painter)
 - [ ] SplitView
 - [ ] Popover/Tooltip
 - [ ] Virtualized lists and grids

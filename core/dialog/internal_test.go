@@ -980,11 +980,12 @@ func (c *internalRecordingCanvas) DrawText(text string, bounds geometry.Rect, fo
 	c.drawTexts = append(c.drawTexts, internalDrawTextCall{text: text, bounds: bounds, fontSize: fontSize, color: color, bold: bold, align: align})
 }
 
-func (c *internalRecordingCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
-func (c *internalRecordingCanvas) PushClip(_ geometry.Rect)                  {}
-func (c *internalRecordingCanvas) PopClip()                                  {}
-func (c *internalRecordingCanvas) PushTransform(_ geometry.Point)            {}
-func (c *internalRecordingCanvas) PopTransform()                             {}
+func (c *internalRecordingCanvas) DrawImage(_ image.Image, _ geometry.Point)    {}
+func (c *internalRecordingCanvas) PushClip(_ geometry.Rect)                     {}
+func (c *internalRecordingCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
+func (c *internalRecordingCanvas) PopClip()                                     {}
+func (c *internalRecordingCanvas) PushTransform(_ geometry.Point)               {}
+func (c *internalRecordingCanvas) PopTransform()                                {}
 
 // --- internalMockOverlayManager ---
 

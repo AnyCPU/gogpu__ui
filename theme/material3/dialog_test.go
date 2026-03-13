@@ -215,8 +215,9 @@ func (c *dialogMockCanvas) DrawText(text string, bounds geometry.Rect, fontSize 
 	c.drawTexts = append(c.drawTexts, dialogDrawTextCall{text: text, bounds: bounds, fontSize: fontSize, color: color, bold: bold, align: align})
 }
 
-func (c *dialogMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
-func (c *dialogMockCanvas) PushClip(_ geometry.Rect)                  {}
-func (c *dialogMockCanvas) PopClip()                                  {}
-func (c *dialogMockCanvas) PushTransform(_ geometry.Point)            {}
-func (c *dialogMockCanvas) PopTransform()                             {}
+func (c *dialogMockCanvas) DrawImage(_ image.Image, _ geometry.Point)    {}
+func (c *dialogMockCanvas) PushClip(_ geometry.Rect)                     {}
+func (c *dialogMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
+func (c *dialogMockCanvas) PopClip()                                     {}
+func (c *dialogMockCanvas) PushTransform(_ geometry.Point)               {}
+func (c *dialogMockCanvas) PopTransform()                                {}

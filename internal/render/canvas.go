@@ -242,17 +242,36 @@ func (c *Canvas) PushClip(r geometry.Rect) {
 	// Compute new clip as intersection with current
 	c.currentClip = c.currentClip.Intersection(r)
 
-	// Apply clip to gg context using Push/Pop state
+	// Set clip on gg context. Currently gg uses this for CPU-side
+	// ClipCoverage masking. Once gg implements GPU scissor rect (Phase 1),
+	// this will also drive hardware scissor for GPU rendering.
 	c.dc.Push()
-
-	// Draw clip rectangle path and apply as clip
-	// Note: gg doesn't have a direct Clip() method, so we work around it
-	// by checking visibility in each draw operation
+	clip := c.currentClip
+	c.dc.ClipRect(float64(clip.Min.X), float64(clip.Min.Y),
+		float64(clip.Width()), float64(clip.Height()))
 }
 
-// PopClip removes the most recently pushed clipping rectangle.
+// PushClipRoundRect pushes a rounded rectangle clipping region.
 //
-// Must be called for each PushClip call.
+// Uses gg.ClipRoundRect which activates GPU SDF-based clipping for
+// rounded rectangles. All subsequent draw operations will be clipped
+// to the rounded rect shape.
+func (c *Canvas) PushClipRoundRect(r geometry.Rect, radius float32) {
+	r = c.applyTransform(r)
+	c.clipStack = append(c.clipStack, c.currentClip)
+	c.currentClip = c.currentClip.Intersection(r)
+
+	c.dc.Push()
+	c.dc.ClipRoundRect(
+		float64(r.Min.X), float64(r.Min.Y),
+		float64(r.Width()), float64(r.Height()),
+		float64(radius),
+	)
+}
+
+// PopClip removes the most recently pushed clipping region.
+//
+// Must be called for each PushClip or PushClipRoundRect call.
 func (c *Canvas) PopClip() {
 	if len(c.clipStack) == 0 {
 		return
