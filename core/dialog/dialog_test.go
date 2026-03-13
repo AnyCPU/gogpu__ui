@@ -480,12 +480,12 @@ func (c *recordingCanvas) DrawText(text string, bounds geometry.Rect, fontSize f
 	c.drawTexts = append(c.drawTexts, drawTextCall{text: text, bounds: bounds, fontSize: fontSize, color: color, bold: bold, align: align})
 }
 
-func (c *recordingCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
-func (c *recordingCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *recordingCanvas) DrawImage(_ image.Image, _ geometry.Point)    {}
+func (c *recordingCanvas) PushClip(_ geometry.Rect)                     {}
 func (c *recordingCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
-func (c *recordingCanvas) PopClip()                                  {}
-func (c *recordingCanvas) PushTransform(_ geometry.Point)            {}
-func (c *recordingCanvas) PopTransform()                             {}
+func (c *recordingCanvas) PopClip()                                     {}
+func (c *recordingCanvas) PushTransform(_ geometry.Point)               {}
+func (c *recordingCanvas) PopTransform()                                {}
 
 // --- mockOverlayManager records overlay operations ---
 

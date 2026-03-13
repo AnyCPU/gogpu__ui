@@ -165,9 +165,9 @@ func (c *scrollbarMockCanvas) StrokeCircle(_ geometry.Point, _ float32, _ widget
 func (c *scrollbarMockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32)             {}
 func (c *scrollbarMockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.Color, _ bool, _ float32) {
 }
-func (c *scrollbarMockCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
-func (c *scrollbarMockCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *scrollbarMockCanvas) DrawImage(_ image.Image, _ geometry.Point)    {}
+func (c *scrollbarMockCanvas) PushClip(_ geometry.Rect)                     {}
 func (c *scrollbarMockCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
-func (c *scrollbarMockCanvas) PopClip()                                  {}
-func (c *scrollbarMockCanvas) PushTransform(_ geometry.Point)            {}
-func (c *scrollbarMockCanvas) PopTransform()                             {}
+func (c *scrollbarMockCanvas) PopClip()                                     {}
+func (c *scrollbarMockCanvas) PushTransform(_ geometry.Point)               {}
+func (c *scrollbarMockCanvas) PopTransform()                                {}

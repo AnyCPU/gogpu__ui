@@ -301,7 +301,7 @@ func (c *noopCanvas) DrawLine(geometry.Point, geometry.Point, Color, float32)   
 func (c *noopCanvas) DrawText(string, geometry.Rect, float32, Color, bool, float32) {}
 func (c *noopCanvas) DrawImage(image.Image, geometry.Point)                         {}
 func (c *noopCanvas) PushClip(geometry.Rect)                                        {}
-func (c *noopCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
+func (c *noopCanvas) PushClipRoundRect(_ geometry.Rect, _ float32)                  {}
 func (c *noopCanvas) PopClip()                                                      {}
 func (c *noopCanvas) PushTransform(geometry.Point)                                  {}
 func (c *noopCanvas) PopTransform()                                                 {}

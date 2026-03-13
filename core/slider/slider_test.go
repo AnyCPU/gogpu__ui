@@ -251,9 +251,9 @@ func (c *recordingCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float3
 func (c *recordingCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.Color, _ bool, _ float32) {
 	c.drawCount++
 }
-func (c *recordingCanvas) DrawImage(_ image.Image, _ geometry.Point) { c.drawCount++ }
-func (c *recordingCanvas) PushClip(_ geometry.Rect)                  {}
+func (c *recordingCanvas) DrawImage(_ image.Image, _ geometry.Point)    { c.drawCount++ }
+func (c *recordingCanvas) PushClip(_ geometry.Rect)                     {}
 func (c *recordingCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
-func (c *recordingCanvas) PopClip()                                  {}
-func (c *recordingCanvas) PushTransform(_ geometry.Point)            {}
-func (c *recordingCanvas) PopTransform()                             {}
+func (c *recordingCanvas) PopClip()                                     {}
+func (c *recordingCanvas) PushTransform(_ geometry.Point)               {}
+func (c *recordingCanvas) PopTransform()                                {}

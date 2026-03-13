@@ -72,7 +72,7 @@ func (c *recordCanvas) DrawText(text string, bounds geometry.Rect, fontSize floa
 
 func (c *recordCanvas) DrawImage(_ image.Image, _ geometry.Point) {}
 
-func (c *recordCanvas) PushClip(r geometry.Rect) {}
+func (c *recordCanvas) PushClip(r geometry.Rect)                     {}
 func (c *recordCanvas) PushClipRoundRect(_ geometry.Rect, _ float32) {}
 
 func (c *recordCanvas) PopClip() {}
