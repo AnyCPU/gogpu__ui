@@ -7,8 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (ListView Widget — TASK-UI-021)
+- **ListView widget** (`core/listview/`) — virtualized scrollable list for large
+  datasets. Fixed item height with efficient recycling: only visible items are
+  laid out, drawn, and cached. Built on ScrollView for scrolling, with
+  Content[C] (CDK) as internal architecture and `BuildItem` convenience API.
+  Mouse click selection (single/multi/none), hover highlight, keyboard navigation
+  (Up/Down/Home/End/PgUp/PgDn), divider lines. Two-way SelectedIndexSignal and
+  SelectedIndicesSignal bindings. Pluggable Painter pattern with DefaultPainter
+  fallback. M3 ListViewPainter with HCT-derived selection/hover colors.
+- **Material 3 ListViewPainter** (`theme/material3/listview.go`) — M3 list item
+  rendering with hover overlay, selection background, divider colors from theme
+
+### Fixed (ScrollView)
+- **Drag sticking** — mouse drag no longer "sticks" when releasing outside the
+  scrollview bounds. ButtonState tracking in event_bridge properly sends
+  MouseUp for all buttons held at previous frame
+- **Track page-scroll** — click on scrollbar track now scrolls by one page
+  (viewport height) instead of jumping to click position
+- **Track repeat** — holding mouse on scrollbar track now auto-repeats
+  page scrolling (500ms initial delay, 100ms repeat interval)
+- **Wheel direction** — mouse wheel now scrolls in natural direction
+  (wheel up = content up = negative delta)
+
+### Fixed (Box Widget)
+- **WheelEvent dispatch** — Box now properly dispatches WheelEvent to children,
+  enabling mouse wheel scrolling for ScrollView inside Box containers
+- **Child clipping** — Box with border or rounded corners now calls PushClip
+  to clip child content to container bounds, preventing overflow
+- **Border z-order** — border is now drawn AFTER children so it renders on top
+  of content instead of being obscured by child widgets
+
+### Fixed (Canvas / GPU Clipping)
+- **PushClip with gg.ClipRect** — Canvas.PushClip now sets clip rect on the
+  underlying gg.Context via ClipRect(), enabling hardware GPU scissor rect
+  clipping. Previously only tracked clip bounds internally without informing
+  the rendering backend, so GPU-rendered shapes ignored clip regions
+
+### Fixed (Event Bridge)
+- **ButtonState tracking** — event_bridge now tracks which mouse buttons were
+  held in the previous frame and synthesizes MouseUp events for buttons that
+  were released between frames, preventing drag state from sticking
+
 ### Changed (Dependencies)
-- **gg** v0.35.3 → **v0.36.0** (GPU GlyphMask cache, RoundRectShape SDF, scene clip support, font hinting, ClearType LCD subpixel)
+- **gg** v0.35.3 → **v0.36.3** (GPU GlyphMask cache, RoundRectShape SDF, scene clip support, font hinting, ClearType LCD subpixel, GPU scissor rect clipping)
 - **golang.org/x/image** v0.36.0 → **v0.37.0**
 - **golang.org/x/text** v0.34.0 → **v0.35.0**
 - **go-text/typesetting** v0.3.3 → **v0.3.4**

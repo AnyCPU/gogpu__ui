@@ -9,9 +9,10 @@ import (
 
 // WheelEvent represents a mouse wheel scroll event.
 //
-// Delta contains the scroll amount in both directions:
-//   - Positive Delta.Y means scrolling up (content moves down)
-//   - Negative Delta.Y means scrolling down (content moves up)
+// Delta contains the scroll amount in both directions.
+// The sign convention matches the gogpu platform:
+//   - Positive Delta.Y means scrolling down (content moves up)
+//   - Negative Delta.Y means scrolling up (content moves down)
 //   - Positive Delta.X means scrolling right
 //   - Negative Delta.X means scrolling left
 //

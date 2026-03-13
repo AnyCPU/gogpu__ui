@@ -121,17 +121,35 @@ func (w *Widget) Layout(ctx widget.Context, constraints geometry.Constraints) ge
 		w.cache.invalidate()
 	}
 
-	// The list fills the available space.
+	// The list fills the available space, but clamps infinite dimensions
+	// to defaults. Without this, unconstrained parents (e.g., Box with
+	// vertical stacking) would cause the viewport to be "infinite",
+	// defeating virtualization (all items would be "visible").
 	size := constraints.Biggest()
-	if size.Width <= 0 || size.Height <= 0 {
-		size = constraints.Constrain(geometry.Sz(defaultViewportWidth, defaultViewportHeight))
+	if size.Width >= geometry.Infinity {
+		size.Width = constraints.Constrain(geometry.Sz(defaultViewportWidth, 0)).Width
+	}
+	if size.Height >= geometry.Infinity {
+		// Use total content height clamped to default viewport height.
+		totalH := w.heights.totalHeight()
+		if totalH > defaultViewportHeight {
+			totalH = defaultViewportHeight
+		}
+		size.Height = totalH
+	}
+	if size.Width <= 0 {
+		size.Width = defaultViewportWidth
+	}
+	if size.Height <= 0 {
+		size.Height = defaultViewportHeight
 	}
 
 	w.viewportWidth = size.Width
 	w.viewportHeight = size.Height
 
-	// Layout the internal scroll view.
-	w.scroll.Layout(ctx, constraints)
+	// Layout the internal scroll view with concrete (non-infinite) constraints.
+	svConstraints := geometry.Tight(size)
+	w.scroll.Layout(ctx, svConstraints)
 
 	return size
 }

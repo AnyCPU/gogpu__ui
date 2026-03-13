@@ -255,7 +255,25 @@ func (b *BoxWidget) Draw(ctx widget.Context, canvas widget.Canvas) {
 		}
 	}
 
-	// Draw border
+	// Clip children when the box has a border or rounded corners,
+	// so content doesn't overflow the visual boundary.
+	clipChildren := !b.style.Border.IsZero() || b.style.Radius > 0
+	if clipChildren {
+		canvas.PushClip(bounds)
+	}
+
+	// Draw children with transform offset for this box's position.
+	canvas.PushTransform(bounds.Min)
+	for _, child := range b.children {
+		child.Draw(ctx, canvas)
+	}
+	canvas.PopTransform()
+
+	if clipChildren {
+		canvas.PopClip()
+	}
+
+	// Draw border AFTER children so it renders on top of content.
 	if !b.style.Border.IsZero() {
 		if b.style.Radius > 0 {
 			canvas.StrokeRoundRect(bounds, b.style.Border.Color, b.style.Radius, b.style.Border.Width)
@@ -263,13 +281,6 @@ func (b *BoxWidget) Draw(ctx widget.Context, canvas widget.Canvas) {
 			canvas.StrokeRect(bounds, b.style.Border.Color, b.style.Border.Width)
 		}
 	}
-
-	// Draw children with transform offset for this box's position
-	canvas.PushTransform(bounds.Min)
-	for _, child := range b.children {
-		child.Draw(ctx, canvas)
-	}
-	canvas.PopTransform()
 }
 
 // drawShadow renders multi-layer concentric rounded rectangles that
@@ -302,6 +313,12 @@ func (b *BoxWidget) Event(ctx widget.Context, e event.Event) bool {
 		return b.dispatchMouseEvent(ctx, me)
 	}
 
+	// For wheel events, translate position to local coordinates
+	// so hit-testing in children works correctly.
+	if we, ok := e.(*event.WheelEvent); ok {
+		return b.dispatchWheelEvent(ctx, we)
+	}
+
 	// Non-mouse events (keyboard, focus) broadcast to all children.
 	for i := len(b.children) - 1; i >= 0; i-- {
 		if b.children[i].Event(ctx, e) {
@@ -315,6 +332,26 @@ func (b *BoxWidget) Event(ctx widget.Context, e event.Event) bool {
 // and dispatches only to children whose bounds contain the position.
 // This mirrors PushTransform(bounds.Min) used in Draw.
 func (b *BoxWidget) dispatchMouseEvent(ctx widget.Context, e *event.MouseEvent) bool {
+	local := *e
+	local.Position = e.Position.Sub(b.Bounds().Min)
+
+	for i := len(b.children) - 1; i >= 0; i-- {
+		child := b.children[i]
+		if bw, ok := child.(interface{ Bounds() geometry.Rect }); ok {
+			if !bw.Bounds().Contains(local.Position) {
+				continue
+			}
+		}
+		if child.Event(ctx, &local) {
+			return true
+		}
+	}
+	return false
+}
+
+// dispatchWheelEvent translates wheel event position to Box-local space
+// and dispatches to children whose bounds contain the position.
+func (b *BoxWidget) dispatchWheelEvent(ctx widget.Context, e *event.WheelEvent) bool {
 	local := *e
 	local.Position = e.Position.Sub(b.Bounds().Min)
 

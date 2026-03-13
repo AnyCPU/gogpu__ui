@@ -29,6 +29,7 @@ import (
 	"github.com/gogpu/ui/core/radio"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/render"
+	"github.com/gogpu/ui/theme/material3"
 	"github.com/gogpu/ui/widget"
 )
 
@@ -36,7 +37,7 @@ func main() {
 	// Create gogpu application with builder pattern.
 	gogpuApp := gogpu.NewApp(gogpu.DefaultConfig().
 		WithTitle("gogpu/ui — Widget Demo").
-		WithSize(800, 600).
+		WithSize(800, 900).
 		WithContinuousRender(false)) // Event-driven: 0% CPU when idle
 
 	// Create UI application wired to gogpu providers.
@@ -197,7 +198,17 @@ func buildUI() *primitives.BoxWidget {
 			Bold().
 			Color(widget.RGBA8(66, 66, 66, 255)),
 
-		buildListView(),
+		// Wrap ListView in a Box with explicit height to ensure
+		// it gets enough space in the vertical stack layout.
+		// Small padding (2px) prevents item highlights from bleeding
+		// past rounded corners — GPU scissor rect is rectangular and
+		// cannot clip to curves. Proper fix: stencil-based clip path in gg.
+		primitives.Box(buildListView()).
+			Height(300).
+			PaddingXY(2, 2).
+			Rounded(8).
+			Background(widget.RGBA8(250, 250, 250, 255)).
+			BorderStyle(1, widget.RGBA8(218, 218, 218, 255)),
 	).
 		Padding(32).
 		Gap(12).
@@ -216,10 +227,12 @@ func buildListView() *listview.Widget {
 		items[i] = fmt.Sprintf("Item %d — Lorem ipsum dolor sit amet", i+1)
 	}
 
+	m3 := material3.New(widget.Hex(0x6750A4))
 	return listview.New(
 		listview.ItemCount(len(items)),
 		listview.FixedItemHeight(36),
 		listview.SelectionModeOpt(listview.SelectionSingle),
+		listview.PainterOpt(material3.ListViewPainter{Theme: m3}),
 		listview.BuildItem(func(ctx listview.ItemContext) widget.Widget {
 			color := widget.RGBA8(33, 33, 33, 255)
 			if ctx.Selected {
@@ -231,7 +244,7 @@ func buildListView() *listview.Widget {
 			if ctx.Selected {
 				t = t.Bold()
 			}
-			return t
+			return primitives.Box(t).PaddingXY(12, 8)
 		}),
 		listview.Divider(true),
 		listview.OnItemClick(func(index int) {

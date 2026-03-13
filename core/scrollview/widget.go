@@ -31,6 +31,9 @@ type Widget struct {
 	dragging        dragAxis
 	dragStart       geometry.Point
 	dragScrollStart float32
+
+	// Track repeat state: page-scroll repeats while mouse is held on the track.
+	trackRepeat trackRepeatState
 }
 
 // New creates a new scroll view Widget wrapping the given content widget.
@@ -147,6 +150,9 @@ func (w *Widget) Draw(ctx widget.Context, canvas widget.Canvas) {
 		return
 	}
 
+	// Process track repeat (page-scroll while mouse held on track).
+	w.tickTrackRepeat(ctx)
+
 	scrollX := w.cfg.ResolvedScrollX()
 	scrollY := w.cfg.ResolvedScrollY()
 
@@ -163,6 +169,66 @@ func (w *Widget) Draw(ctx widget.Context, canvas widget.Canvas) {
 
 	// Draw scrollbar(s) on top.
 	w.paintScrollbars(canvas)
+}
+
+// tickTrackRepeat fires the next page-scroll if the repeat timer has elapsed.
+// Called from Draw so the self-invalidation loop drives continuous scrolling.
+func (w *Widget) tickTrackRepeat(ctx widget.Context) {
+	if !w.trackRepeat.active {
+		return
+	}
+
+	now := ctx.Now()
+	elapsed := now.Sub(w.trackRepeat.lastFire)
+
+	// Initial press has a longer delay before first repeat.
+	delay := trackRepeatInterval
+	if w.trackRepeat.count == 0 {
+		delay = trackRepeatInitialDelay
+	}
+
+	if elapsed < delay {
+		// Not yet time — request another frame to check again.
+		ctx.Invalidate()
+		return
+	}
+
+	// Check if thumb has reached or passed the click position — stop.
+	if w.trackRepeatReached() {
+		w.trackRepeat.active = false
+		return
+	}
+
+	if w.trackRepeat.axis == dragVertical {
+		pageSize := w.viewportSize.Height
+		setScroll(w, ctx, w.cfg.ResolvedScrollX(), w.cfg.ResolvedScrollY()+float32(w.trackRepeat.direction)*pageSize)
+	} else {
+		pageSize := w.viewportSize.Width
+		setScroll(w, ctx, w.cfg.ResolvedScrollX()+float32(w.trackRepeat.direction)*pageSize, w.cfg.ResolvedScrollY())
+	}
+
+	w.trackRepeat.lastFire = now
+	w.trackRepeat.count++
+
+	// Request next frame for continuous repeat.
+	ctx.Invalidate()
+}
+
+// trackRepeatReached returns true if the scrollbar thumb has reached
+// or passed the original click position during track repeat scrolling.
+func (w *Widget) trackRepeatReached() bool {
+	vThumb, hThumb := w.computeThumbRects()
+	if w.trackRepeat.axis == dragVertical && !vThumb.IsEmpty() {
+		center := (vThumb.Min.Y + vThumb.Max.Y) / 2
+		return (w.trackRepeat.direction > 0 && center >= w.trackRepeat.clickPos) ||
+			(w.trackRepeat.direction < 0 && center <= w.trackRepeat.clickPos)
+	}
+	if w.trackRepeat.axis == dragHorizontal && !hThumb.IsEmpty() {
+		center := (hThumb.Min.X + hThumb.Max.X) / 2
+		return (w.trackRepeat.direction > 0 && center >= w.trackRepeat.clickPos) ||
+			(w.trackRepeat.direction < 0 && center <= w.trackRepeat.clickPos)
+	}
+	return false
 }
 
 // paintScrollbars renders scrollbar overlays.
@@ -191,7 +257,15 @@ func (w *Widget) paintScrollbars(canvas widget.Canvas) {
 
 // Event handles an input event and returns true if consumed.
 func (w *Widget) Event(ctx widget.Context, e event.Event) bool {
-	// First try to pass events to the content child.
+	// Handle scrollbar interactions FIRST so the thumb drag always works,
+	// even when content would consume the same mouse event (e.g., item click).
+	if me, ok := e.(*event.MouseEvent); ok {
+		if w.dragging != dragNone || w.isOnScrollbar(me.Position) {
+			return handleEvent(w, ctx, e)
+		}
+	}
+
+	// Then pass events to the content child.
 	if w.content != nil {
 		if consumed := w.content.Event(ctx, e); consumed {
 			return true
@@ -258,6 +332,16 @@ func (w *Widget) ContentSize() geometry.Size {
 	return w.contentSize
 }
 
+// ScrollbarInset returns the width reserved for visible scrollbars.
+// When the vertical scrollbar is shown, this is the total scrollbar width
+// (track + padding). Otherwise zero.
+func (w *Widget) ScrollbarInset() float32 {
+	if w.shouldShowVScrollbar() {
+		return scrollbarWidth + scrollbarPadding*2
+	}
+	return 0
+}
+
 // canScrollX reports whether horizontal scrolling is possible.
 func (w *Widget) canScrollX() bool {
 	if w.cfg.direction == Vertical {
@@ -287,6 +371,18 @@ func (w *Widget) shouldShowVScrollbar() bool {
 	default: // ScrollbarAuto
 		return w.contentSize.Height > w.viewportSize.Height
 	}
+}
+
+// isOnScrollbar reports whether the given point is within the scrollbar track area.
+func (w *Widget) isOnScrollbar(p geometry.Point) bool {
+	vTrack, hTrack := w.computeTrackRects()
+	if w.shouldShowVScrollbar() && !vTrack.IsEmpty() && vTrack.Contains(p) {
+		return true
+	}
+	if w.shouldShowHScrollbar() && !hTrack.IsEmpty() && hTrack.Contains(p) {
+		return true
+	}
+	return false
 }
 
 // shouldShowHScrollbar returns true if the horizontal scrollbar should be drawn.

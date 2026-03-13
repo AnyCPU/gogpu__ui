@@ -64,6 +64,9 @@ func (vc *virtualContent) Draw(ctx widget.Context, canvas widget.Canvas) {
 	// Update the widget cache for the visible range.
 	lv.cache.update(start, end, lv.cfg.itemContent, selectedIdx, lv.hoveredIndex)
 
+	// Content width excludes scrollbar inset so items don't render under it.
+	contentWidth := lv.viewportWidth - lv.scroll.ScrollbarInset()
+
 	// Layout and draw each visible item.
 	for i := start; i < end; i++ {
 		w := lv.cache.widgetAt(i - start)
@@ -75,8 +78,8 @@ func (vc *virtualContent) Draw(ctx widget.Context, canvas widget.Canvas) {
 
 		// Layout the item widget with fixed width, flexible height.
 		itemConstraints := geometry.Constraints{
-			MinWidth:  lv.viewportWidth,
-			MaxWidth:  lv.viewportWidth,
+			MinWidth:  contentWidth,
+			MaxWidth:  contentWidth,
 			MinHeight: 0,
 			MaxHeight: geometry.Infinity,
 		}
@@ -86,7 +89,7 @@ func (vc *virtualContent) Draw(ctx widget.Context, canvas widget.Canvas) {
 		lv.heights.setMeasured(i, actualSize.Height)
 
 		// Compute item bounds using actual measured height.
-		itemBounds := geometry.NewRect(0, y, lv.viewportWidth, actualSize.Height)
+		itemBounds := geometry.NewRect(0, y, contentWidth, actualSize.Height)
 
 		// Set widget bounds.
 		if setter, ok := w.(interface{ SetBounds(geometry.Rect) }); ok {
@@ -117,7 +120,7 @@ func (vc *virtualContent) Draw(ctx widget.Context, canvas widget.Canvas) {
 		if lv.cfg.divider && i < end-1 {
 			divY := y + actualSize.Height
 			lv.painter.PaintDivider(canvas, DividerState{
-				Bounds:    geometry.NewRect(0, divY, lv.viewportWidth, dividerHeight),
+				Bounds:    geometry.NewRect(0, divY, contentWidth, dividerHeight),
 				ItemIndex: i,
 			})
 		}

@@ -290,13 +290,13 @@ v1.0.0  → Production (when ready)
 | ~~TASK-UI-028~~ | ScrollView (vertical/horizontal/both, wheel+keyboard+drag, signal bindings, M3 painter) | ✅ Done |
 | ~~TASK-UI-029~~ | TabView (tabbed navigation, lazy content, closeable, keyboard nav, M3 painter) | ✅ Done |
 | ~~TASK-UI-057 SP3~~ | scene.Scene integration (tile-parallel rendering, SceneCanvas adapter) | ✅ Done |
+| ~~TASK-UI-021~~ | ListView (virtualized list, recycling, selection, keyboard nav, M3 painter) | ✅ Done |
 
 **Remaining:**
 
 | Task | Description | LOC | Priority |
 |------|-------------|-----|----------|
 | TASK-UI-016 | Progress Indicators | ~500 | P2 |
-| TASK-UI-021 | VirtualizedList | ~1,500 | P0 |
 | TASK-UI-022 | VirtualizedGrid | ~800 | P1 |
 | TASK-UI-025 | Transitions | ~600 | P2 |
 | TASK-UI-027 | Popover/Tooltip | ~600 | P1 |
@@ -310,7 +310,7 @@ v1.0.0  → Production (when ready)
 - Additional widgets (Slider ✅, Dialog ✅, Progress, Tooltip)
 - Animation system ✅ (Tween, Spring, M3 motion, CubicBezier, Sequence/Parallel)
 - Containers (ScrollView ✅, TabView ✅, SplitView)
-- Virtualization for large datasets
+- Virtualization ✅ (ListView with recycling, 1000+ items)
 
 ---
 
@@ -351,7 +351,7 @@ v1.0.0  → Production (when ready)
 | Phase 1.5 (Extensibility) | 6 | ~9K | ✅ Complete |
 | Phase 2 (Beta) | 16 | ~15K | ✅ Complete (16/16) |
 | Phase 2.5 (Signals) | 5 | ~1.5K | ✅ Complete |
-| Phase 3 (RC) | 19 | ~10K | In Progress (11/19 done) |
+| Phase 3 (RC) | 19 | ~10K | In Progress (12/19 done) |
 | Phase 4 (v1.0) | 10 | ~24K | Planned |
 | **Total** | **62+** | **~80K LOC** | |
 
@@ -361,10 +361,10 @@ v1.0.0  → Production (when ready)
 
 | Dependency | Version | Purpose | Status |
 |------------|---------|---------|--------|
-| gogpu/gg | v0.35.3 | 2D rendering | ✅ Integrated |
+| gogpu/gg | v0.36.3 | 2D rendering | ✅ Integrated |
 | gogpu/gpucontext | v0.9.0 | Shared interfaces | ✅ Integrated |
 | coregx/signals | v0.1.0 | State management | ✅ Integrated |
-| golang.org/x/image | v0.36.0 | Standard Go fonts | ✅ Integrated |
+| golang.org/x/image | v0.37.0 | Inter font (standard) | ✅ Integrated |
 
 ---
 

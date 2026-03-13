@@ -1,9 +1,28 @@
 package scrollview
 
 import (
+	"time"
+
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/widget"
+)
+
+// trackRepeatState holds state for repeated page-scroll while the mouse
+// button is held down on the scrollbar track.
+type trackRepeatState struct {
+	active    bool
+	axis      dragAxis  // which axis is being scrolled
+	direction int       // -1 for up/left, +1 for down/right
+	clickPos  float32   // click position on the scroll axis
+	lastFire  time.Time // time of last scroll action
+	count     int       // number of repeats fired (0 = initial click)
+}
+
+// Track repeat timing constants (Windows convention).
+const (
+	trackRepeatInitialDelay = 300 * time.Millisecond
+	trackRepeatInterval     = 50 * time.Millisecond
 )
 
 // handleEvent processes input events for the scroll view widget.
@@ -27,8 +46,8 @@ func handleWheelEvent(w *Widget, ctx widget.Context, e *event.WheelEvent) bool {
 	}
 
 	step := w.cfg.resolvedScrollStep()
-	dx := -e.Delta.X * step
-	dy := -e.Delta.Y * step
+	dx := e.Delta.X * step
+	dy := e.Delta.Y * step
 
 	// Restrict scroll axes based on direction.
 	switch w.cfg.direction {
@@ -107,19 +126,50 @@ func handleMousePress(w *Widget, ctx widget.Context, e *event.MouseEvent) bool {
 		return true
 	}
 
-	// Check if press is on the track (click-to-position).
+	// Check if press is on the track (page scroll).
+	// Clicking the track above/left of the thumb scrolls one page up/left;
+	// clicking below/right scrolls one page down/right.
+	// This follows the Windows convention (most predictable for users).
 	vTrack, hTrack := w.computeTrackRects()
 
 	if w.canScrollY() && !vTrack.IsEmpty() && vTrack.Contains(e.Position) {
-		newScrollY := scrollFromTrackClick(e.Position.Y, vTrack.Min.Y, vTrack.Height(), w.viewportSize.Height, w.contentSize.Height)
-		setScroll(w, ctx, w.cfg.ResolvedScrollX(), newScrollY)
+		dir := 1
+		if !vThumb.IsEmpty() && e.Position.Y < vThumb.Min.Y {
+			dir = -1
+		}
+		pageSize := w.viewportSize.Height
+		setScroll(w, ctx, w.cfg.ResolvedScrollX(), w.cfg.ResolvedScrollY()+float32(dir)*pageSize)
+
+		// Start track repeat for continuous scrolling while held.
+		now := ctx.Now()
+		w.trackRepeat = trackRepeatState{
+			active:    true,
+			axis:      dragVertical,
+			direction: dir,
+			clickPos:  e.Position.Y,
+			lastFire:  now,
+		}
 		ctx.RequestFocus(w)
 		return true
 	}
 
 	if w.canScrollX() && !hTrack.IsEmpty() && hTrack.Contains(e.Position) {
-		newScrollX := scrollFromTrackClick(e.Position.X, hTrack.Min.X, hTrack.Width(), w.viewportSize.Width, w.contentSize.Width)
-		setScroll(w, ctx, newScrollX, w.cfg.ResolvedScrollY())
+		dir := 1
+		if !hThumb.IsEmpty() && e.Position.X < hThumb.Min.X {
+			dir = -1
+		}
+		pageSize := w.viewportSize.Width
+		setScroll(w, ctx, w.cfg.ResolvedScrollX()+float32(dir)*pageSize, w.cfg.ResolvedScrollY())
+
+		// Start track repeat.
+		now := ctx.Now()
+		w.trackRepeat = trackRepeatState{
+			active:    true,
+			axis:      dragHorizontal,
+			direction: dir,
+			clickPos:  e.Position.X,
+			lastFire:  now,
+		}
 		ctx.RequestFocus(w)
 		return true
 	}
@@ -134,16 +184,27 @@ func handleMouseRelease(w *Widget, ctx widget.Context, e *event.MouseEvent) bool
 	}
 
 	wasDragging := w.dragging != dragNone
+	wasRepeating := w.trackRepeat.active
 	w.dragging = dragNone
-	if wasDragging {
+	w.trackRepeat.active = false
+	if wasDragging || wasRepeating {
 		ctx.Invalidate()
 	}
-	return wasDragging
+	return wasDragging || wasRepeating
 }
 
 // handleMouseMove handles mouse movement for drag tracking.
 func handleMouseMove(w *Widget, ctx widget.Context, e *event.MouseEvent) bool {
 	if w.dragging == dragNone {
+		return false
+	}
+
+	// If the left button is no longer pressed, the MouseRelease was lost
+	// (e.g., released outside widget bounds). Clear the drag state.
+	if !e.Buttons.IsLeftPressed() {
+		w.dragging = dragNone
+		w.trackRepeat.active = false
+		ctx.Invalidate()
 		return false
 	}
 

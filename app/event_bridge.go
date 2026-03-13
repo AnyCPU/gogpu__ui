@@ -14,12 +14,23 @@ import (
 // is provided. The callbacks are invoked on the main thread by the host
 // application's event loop.
 func attachEventBridge(es gpucontext.EventSource, w *Window) {
+	// Track which mouse buttons are currently pressed so that MouseMove
+	// events carry accurate ButtonState. Without this, widgets that rely
+	// on drag state (e.g., scrollbar thumb dragging) cannot detect a
+	// "lost" MouseRelease (e.g., released outside widget bounds).
+	var pressedButtons event.ButtonState
+
+	// Track last known mouse position so WheelEvents carry correct position
+	// (the platform's OnScroll callback doesn't provide mouse coordinates).
+	var lastMousePos geometry.Point
+
 	es.OnMouseMove(func(x, y float64) {
 		pos := geometry.Pt(float32(x), float32(y))
+		lastMousePos = pos
 		e := event.NewMouseEvent(
 			event.MouseMove,
 			event.ButtonNone,
-			0, // no buttons pressed for move
+			pressedButtons,
 			pos,
 			pos, // global position same as local for root dispatch
 			event.ModNone,
@@ -30,10 +41,11 @@ func attachEventBridge(es gpucontext.EventSource, w *Window) {
 	es.OnMousePress(func(button gpucontext.MouseButton, x, y float64) {
 		pos := geometry.Pt(float32(x), float32(y))
 		btn := translateMouseButton(button)
+		pressedButtons |= buttonToState(btn)
 		e := event.NewMouseEvent(
 			event.MousePress,
 			btn,
-			buttonToState(btn),
+			pressedButtons,
 			pos,
 			pos,
 			event.ModNone,
@@ -44,10 +56,11 @@ func attachEventBridge(es gpucontext.EventSource, w *Window) {
 	es.OnMouseRelease(func(button gpucontext.MouseButton, x, y float64) {
 		pos := geometry.Pt(float32(x), float32(y))
 		btn := translateMouseButton(button)
+		pressedButtons &^= buttonToState(btn)
 		e := event.NewMouseEvent(
 			event.MouseRelease,
 			btn,
-			0, // button is now released
+			pressedButtons,
 			pos,
 			pos,
 			event.ModNone,
@@ -83,8 +96,8 @@ func attachEventBridge(es gpucontext.EventSource, w *Window) {
 		delta := geometry.Pt(float32(dx), float32(dy))
 		e := event.NewWheelEvent(
 			delta,
-			geometry.Pt(0, 0), // scroll position is not provided by EventSource
-			geometry.Pt(0, 0),
+			lastMousePos,
+			lastMousePos,
 			event.ModNone,
 		)
 		w.HandleEvent(e)
