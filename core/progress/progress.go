@@ -60,14 +60,11 @@ const (
 	defaultFontSize    float32 = 11
 	percentMultiplier  float64 = 100
 
-	// arcSegments is the number of line segments used to approximate an arc.
-	arcSegments = 36
-
-	// indeterminateArcSpan is the angular span of the indeterminate arc in radians (~90 degrees).
-	indeterminateArcSpan = math.Pi / 2
-
-	// indeterminateRPM is how fast the indeterminate arc rotates (revolutions per second).
-	indeterminateRPS = 1.0
+	// M3 animation timing (Flutter reference: progress_indicator.dart).
+	// One grow/shrink cycle takes 1333ms; rotation period is ~1568ms.
+	arcCycleDuration     = 1.333       // seconds per arc expand+contract cycle
+	rotationDuration     = 1.568       // seconds per full rotation
+	indeterminateArcSpan = math.Pi / 2 // fallback for DefaultPainter
 )
 
 // SetValue updates the indicator's static value.
@@ -108,6 +105,15 @@ func (w *Widget) Draw(ctx widget.Context, canvas widget.Canvas) {
 		return
 	}
 
+	if w.cfg.indeterminate {
+		w.drawIndeterminate(ctx, canvas, bounds)
+	} else {
+		w.drawDeterminate(ctx, canvas, bounds)
+	}
+}
+
+// drawDeterminate renders the progress indicator directly via the painter.
+func (w *Widget) drawDeterminate(_ widget.Context, canvas widget.Canvas, bounds geometry.Rect) {
 	diameter := w.cfg.diameter
 	if diameter <= 0 {
 		diameter = defaultDiameter
@@ -117,43 +123,68 @@ func (w *Widget) Draw(ctx widget.Context, canvas widget.Canvas) {
 		strokeW = defaultStrokeWidth
 	}
 
+	value := clampValue(w.cfg.ResolvedValue())
 	ps := PaintState{
 		Bounds:      bounds,
 		Diameter:    diameter,
 		StrokeWidth: strokeW,
 		Disabled:    w.cfg.ResolvedDisabled(),
 		ColorScheme: w.cfg.colorScheme,
+		Value:       value,
+		ShowLabel:   w.cfg.showLabel,
 	}
-
-	if w.cfg.indeterminate {
-		ps.Indeterminate = true
-		ps.Rotation = w.computeRotation(ctx)
-	} else {
-		value := clampValue(w.cfg.ResolvedValue())
-		ps.Value = value
-		ps.ShowLabel = w.cfg.showLabel
-		if ps.ShowLabel {
-			ps.Label = w.resolveLabel(value)
-		}
+	if ps.ShowLabel {
+		ps.Label = w.resolveLabel(value)
 	}
 
 	w.painter.PaintProgress(canvas, ps)
-
-	// Keep requesting redraws while spinning.
-	if w.cfg.indeterminate {
-		w.SetNeedsRedraw(true)
-		ctx.Invalidate()
-	}
 }
 
-// computeRotation calculates the current rotation angle for indeterminate mode.
-func (w *Widget) computeRotation(ctx widget.Context) float64 {
+// drawIndeterminate renders the spinner via the painter.
+func (w *Widget) drawIndeterminate(ctx widget.Context, canvas widget.Canvas, bounds geometry.Rect) {
+	diameter := w.cfg.diameter
+	if diameter <= 0 {
+		diameter = defaultDiameter
+	}
+	strokeW := w.cfg.strokeWidth
+	if strokeW <= 0 {
+		strokeW = defaultStrokeWidth
+	}
+
+	elapsed := w.elapsedSeconds(ctx)
+	ps := PaintState{
+		Bounds:         bounds,
+		Diameter:       diameter,
+		StrokeWidth:    strokeW,
+		Disabled:       w.cfg.ResolvedDisabled(),
+		ColorScheme:    w.cfg.colorScheme,
+		Indeterminate:  true,
+		Rotation:       computeRotation(elapsed),
+		AnimationPhase: computeAnimationPhase(elapsed),
+	}
+
+	w.painter.PaintProgress(canvas, ps)
+	w.MarkRedrawLocal()
+	ctx.InvalidateRect(w.Bounds())
+}
+
+// elapsedSeconds returns seconds since the spinner started.
+func (w *Widget) elapsedSeconds(ctx widget.Context) float64 {
 	now := ctx.Now()
 	if w.startTime.IsZero() {
 		w.startTime = now
 	}
-	elapsed := now.Sub(w.startTime).Seconds()
-	return elapsed * indeterminateRPS * 2 * math.Pi
+	return now.Sub(w.startTime).Seconds()
+}
+
+// computeRotation returns the continuous rotation angle in radians.
+func computeRotation(elapsed float64) float64 {
+	return (elapsed / rotationDuration) * 2 * math.Pi
+}
+
+// computeAnimationPhase returns a 0-1 sawtooth phase for the arc grow/shrink cycle.
+func computeAnimationPhase(elapsed float64) float64 {
+	return math.Mod(elapsed/arcCycleDuration, 1.0)
 }
 
 // resolveLabel computes the label text for the given value.

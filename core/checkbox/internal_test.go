@@ -1,6 +1,7 @@
 package checkbox
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -1050,6 +1051,7 @@ type internalDrawLineCall struct {
 
 func (c *internalMockCanvas) Clear(_ widget.Color)                                  {}
 func (c *internalMockCanvas) DrawRect(_ geometry.Rect, _ widget.Color)              {}
+func (c *internalMockCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color)        {}
 func (c *internalMockCanvas) StrokeRect(_ geometry.Rect, _ widget.Color, _ float32) {}
 
 func (c *internalMockCanvas) DrawRoundRect(r geometry.Rect, color widget.Color, radius float32) {
@@ -1062,6 +1064,8 @@ func (c *internalMockCanvas) StrokeRoundRect(r geometry.Rect, color widget.Color
 
 func (c *internalMockCanvas) DrawCircle(_ geometry.Point, _ float32, _ widget.Color)              {}
 func (c *internalMockCanvas) StrokeCircle(_ geometry.Point, _ float32, _ widget.Color, _ float32) {}
+func (c *internalMockCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
+}
 
 func (c *internalMockCanvas) DrawLine(from, to geometry.Point, color widget.Color, strokeWidth float32) {
 	c.drawLines = append(c.drawLines, internalDrawLineCall{from: from, to: to, color: color, strokeWidth: strokeWidth})
@@ -1082,6 +1086,8 @@ func (c *internalMockCanvas) PopClip()                                     {}
 func (c *internalMockCanvas) PushTransform(_ geometry.Point)               {}
 func (c *internalMockCanvas) PopTransform()                                {}
 func (c *internalMockCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (c *internalMockCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (c *internalMockCanvas) ReplayScene(_ *scene.Scene)                   {}
 
 // --- Signal Binding Tests ---
 
@@ -1402,5 +1408,73 @@ func TestConfig_ResolvedDisabled_ReadonlySignal(t *testing.T) {
 
 	if !c.ResolvedDisabled() {
 		t.Error("ResolvedDisabled() should be true (readonly computed signal)")
+	}
+}
+
+// --- Granular Invalidation Tests (TASK-UI-INVAL-001b) ---
+
+func TestGranularInvalidation_Checkbox_HoverEnter(t *testing.T) {
+	w := New(Label("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+	ctx := widget.NewContext()
+
+	e := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, e)
+
+	if ctx.IsInvalidated() {
+		t.Error("hover enter should use granular invalidation, not ctx.Invalidate()")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("hover enter should set needsRedraw")
+	}
+	if ctx.InvalidatedRect().IsEmpty() {
+		t.Error("hover enter should trigger InvalidateRect")
+	}
+}
+
+func TestGranularInvalidation_Checkbox_HoverLeave(t *testing.T) {
+	w := New(Label("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+	ctx := widget.NewContext()
+
+	e := event.NewMouseEvent(event.MouseLeave, event.ButtonNone, 0,
+		geometry.Pt(150, 20), geometry.Pt(150, 20), event.ModNone)
+	handleEvent(w, ctx, e)
+
+	if ctx.IsInvalidated() {
+		t.Error("hover leave should use granular invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("hover leave should set needsRedraw")
+	}
+}
+
+func TestGranularInvalidation_Checkbox_PressRelease(t *testing.T) {
+	toggled := false
+	w := New(Label("Test"), OnToggle(func(bool) { toggled = true }))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+
+	// Press.
+	ctx := widget.NewContext()
+	press := event.NewMouseEvent(event.MousePress, event.ButtonLeft, event.ButtonStateLeft,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, press)
+
+	if ctx.IsInvalidated() {
+		t.Error("press should use granular invalidation")
+	}
+
+	// Release inside.
+	ctx = widget.NewContext()
+	release := event.NewMouseEvent(event.MouseRelease, event.ButtonLeft, 0,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, release)
+
+	if ctx.IsInvalidated() {
+		t.Error("release should use granular invalidation")
+	}
+	if !toggled {
+		t.Error("onToggle should still fire on release inside bounds")
 	}
 }

@@ -1,6 +1,7 @@
 package devtools_test
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -44,6 +45,8 @@ func (c *recordCanvas) DrawRect(r geometry.Rect, color widget.Color) {
 	c.calls = append(c.calls, drawCall{method: methodDrawRect, bounds: r, color: color})
 }
 
+func (c *recordCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color) {}
+
 func (c *recordCanvas) StrokeRect(r geometry.Rect, color widget.Color, strokeWidth float32) {
 	c.calls = append(c.calls, drawCall{method: methodStrokeRect, bounds: r, color: color, strokeWidth: strokeWidth})
 }
@@ -65,6 +68,8 @@ func (c *recordCanvas) DrawCircle(center geometry.Point, radius float32, color w
 
 func (c *recordCanvas) StrokeCircle(center geometry.Point, radius float32, color widget.Color, strokeWidth float32) {
 	c.calls = append(c.calls, drawCall{method: methodStrokeCircle, color: color, radius: radius, strokeWidth: strokeWidth})
+}
+func (c *recordCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
 }
 
 func (c *recordCanvas) DrawLine(from, to geometry.Point, color widget.Color, strokeWidth float32) {
@@ -90,6 +95,8 @@ func (c *recordCanvas) PopClip()                                     {}
 func (c *recordCanvas) PushTransform(_ geometry.Point)               {}
 func (c *recordCanvas) PopTransform()                                {}
 func (c *recordCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (c *recordCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (c *recordCanvas) ReplayScene(_ *scene.Scene)                   {}
 
 // Method name constants to satisfy goconst.
 const (

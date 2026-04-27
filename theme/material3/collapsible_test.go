@@ -1,6 +1,7 @@
 package material3
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -215,6 +216,7 @@ type colMockCanvas struct {
 
 func (c *colMockCanvas) Clear(_ widget.Color)                                  {}
 func (c *colMockCanvas) DrawRect(_ geometry.Rect, _ widget.Color)              { c.drawCount++ }
+func (c *colMockCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color)        {}
 func (c *colMockCanvas) StrokeRect(_ geometry.Rect, _ widget.Color, _ float32) { c.drawCount++ }
 func (c *colMockCanvas) DrawRoundRect(_ geometry.Rect, _ widget.Color, _ float32) {
 	c.drawCount++
@@ -227,6 +229,8 @@ func (c *colMockCanvas) StrokeRoundRect(_ geometry.Rect, _ widget.Color, _ float
 func (c *colMockCanvas) DrawCircle(_ geometry.Point, _ float32, _ widget.Color) { c.drawCount++ }
 func (c *colMockCanvas) StrokeCircle(_ geometry.Point, _ float32, _ widget.Color, _ float32) {
 	c.drawCount++
+}
+func (c *colMockCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
 }
 func (c *colMockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32) {
 	c.drawCount++
@@ -247,3 +251,5 @@ func (c *colMockCanvas) PopClip()                                     {}
 func (c *colMockCanvas) PushTransform(_ geometry.Point)               {}
 func (c *colMockCanvas) PopTransform()                                {}
 func (c *colMockCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (c *colMockCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (c *colMockCanvas) ReplayScene(_ *scene.Scene)                   {}

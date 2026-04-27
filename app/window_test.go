@@ -1,6 +1,7 @@
 package app
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -379,7 +380,7 @@ func TestWindow_FrameReflush(t *testing.T) {
 	})
 
 	wp := &mockWindowProvider{width: 400, height: 300, scale: 1.0}
-	w := newWindow(wp, nil, sched, theme.DefaultLight())
+	w := newWindow(wp, nil, sched, theme.DefaultLight(), RenderModeHostManaged)
 	w.SetRoot(root)
 
 	sched.MarkDirty(root)
@@ -432,13 +433,16 @@ func (w *cursorSettingOnLayoutWidget) Event(_ widget.Context, _ event.Event) boo
 // mockCanvas implements widget.Canvas for testing.
 type mockCanvas struct{}
 
-func (m *mockCanvas) Clear(widget.Color)                                                            {}
-func (m *mockCanvas) DrawRect(geometry.Rect, widget.Color)                                          {}
-func (m *mockCanvas) StrokeRect(geometry.Rect, widget.Color, float32)                               {}
-func (m *mockCanvas) DrawRoundRect(geometry.Rect, widget.Color, float32)                            {}
-func (m *mockCanvas) StrokeRoundRect(geometry.Rect, widget.Color, float32, float32)                 {}
-func (m *mockCanvas) DrawCircle(geometry.Point, float32, widget.Color)                              {}
-func (m *mockCanvas) StrokeCircle(geometry.Point, float32, widget.Color, float32)                   {}
+func (m *mockCanvas) Clear(widget.Color)                                            {}
+func (m *mockCanvas) DrawRect(geometry.Rect, widget.Color)                          {}
+func (m *mockCanvas) FillRectDirect(geometry.Rect, widget.Color)                    {}
+func (m *mockCanvas) StrokeRect(geometry.Rect, widget.Color, float32)               {}
+func (m *mockCanvas) DrawRoundRect(geometry.Rect, widget.Color, float32)            {}
+func (m *mockCanvas) StrokeRoundRect(geometry.Rect, widget.Color, float32, float32) {}
+func (m *mockCanvas) DrawCircle(geometry.Point, float32, widget.Color)              {}
+func (m *mockCanvas) StrokeCircle(geometry.Point, float32, widget.Color, float32)   {}
+func (m *mockCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
+}
 func (m *mockCanvas) DrawLine(geometry.Point, geometry.Point, widget.Color, float32)                {}
 func (m *mockCanvas) DrawText(string, geometry.Rect, float32, widget.Color, bool, widget.TextAlign) {}
 
@@ -452,6 +456,8 @@ func (m *mockCanvas) PopClip()                                     {}
 func (m *mockCanvas) PushTransform(geometry.Point)                 {}
 func (m *mockCanvas) PopTransform()                                {}
 func (m *mockCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (m *mockCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (m *mockCanvas) ReplayScene(_ *scene.Scene)                   {}
 
 // --- Retained-mode rendering tests ---
 
@@ -463,7 +469,7 @@ func TestWindow_DrawTo_ReportsCleanTree(t *testing.T) {
 
 	canvas := &mockCanvas{}
 
-	// First draw: all widgets are dirty (just mounted).
+	// First draw: all widgets are dirty (just mounted, needsFullRepaint=true).
 	drawn := w.DrawTo(canvas)
 	if !drawn {
 		t.Error("first DrawTo should report dirty (all widgets dirty after mount)")
@@ -472,15 +478,11 @@ func TestWindow_DrawTo_ReportsCleanTree(t *testing.T) {
 	// Reset tracking.
 	root.drawCalled = false
 
-	// Second draw: nothing changed. In Sub-Phase 1, DrawTo still draws
-	// (existing widgets don't self-dirty on event state changes yet),
-	// but returns false to indicate the tree was clean.
+	// Second draw: nothing changed but DrawTo still draws (host may have
+	// cleared pixmap). Returns true because a valid frame was produced.
 	drawn = w.DrawTo(canvas)
-	if drawn {
-		t.Error("second DrawTo should report clean (no widgets dirty)")
-	}
-	if !root.drawCalled {
-		t.Error("root Draw should still be called (Sub-Phase 1 always draws)")
+	if !drawn {
+		t.Error("second DrawTo should return true (always draws)")
 	}
 }
 
@@ -679,7 +681,7 @@ func TestWindow_DrawTo_ReturnsDrawStats(t *testing.T) {
 	}
 }
 
-func TestWindow_DrawTo_SkippedFrameHasZeroStats(t *testing.T) {
+func TestWindow_DrawTo_CleanTreeStillDraws(t *testing.T) {
 	a := New()
 	w := a.Window()
 	root := newMockWidget()
@@ -693,14 +695,14 @@ func TestWindow_DrawTo_SkippedFrameHasZeroStats(t *testing.T) {
 		t.Error("first draw should report 1 drawn widget")
 	}
 
-	// Second draw is skipped (nothing dirty).
+	// Second draw: tree is clean but DrawTo still draws (full repaint)
+	// because the host may have cleared the pixmap before calling DrawTo.
 	drawn := w.DrawTo(canvas)
-	if drawn {
-		t.Error("second draw should be skipped")
+	if !drawn {
+		t.Error("DrawTo should always draw (host may have cleared pixmap)")
 	}
-	// Stats from last actual draw are retained.
 	if w.LastDrawStats().DrawnWidgets != 1 {
-		t.Error("stats should be retained from last actual draw")
+		t.Error("clean-tree full repaint should still draw 1 widget")
 	}
 }
 
@@ -753,6 +755,93 @@ func TestWindow_LastDrawStats_NoRoot(t *testing.T) {
 		t.Errorf("TotalWidgets = %d, want 0 (no root)", stats.TotalWidgets)
 	}
 }
+
+// --- DirtyTracker wiring tests (Phase 4, ADR-004) ---
+
+func TestWindow_DrawTo_SetsDirtyTrackerOnContext(t *testing.T) {
+	// During incremental draw, Window should set the dirty tracker on
+	// the context so RepaintBoundary can use the fast path.
+	a := New()
+	w := a.Window()
+
+	// Track whether DirtyTracker was set during draw by using a widget
+	// that inspects the context.
+	trackerSeen := false
+	spy := &contextSpyWidget{
+		onDraw: func(ctx widget.Context) {
+			if provider, ok := ctx.(widget.DirtyTrackerProvider); ok {
+				if provider.DirtyTracker() != nil {
+					trackerSeen = true
+				}
+			}
+		},
+	}
+	spy.SetVisible(true)
+	spy.SetEnabled(true)
+	spy.SetNeedsRedraw(true)
+	w.SetRoot(spy)
+
+	canvas := &mockCanvas{}
+
+	// First draw is a full repaint (needsFullRepaint=true).
+	// Full repaint does NOT set dirty tracker (by design — all widgets
+	// are drawn unconditionally). The tracker may or may not be visible
+	// depending on the draw path. Reset spy state.
+	w.DrawTo(canvas)
+	trackerSeen = false
+
+	// Mark widget dirty so next DrawTo triggers incremental path.
+	spy.SetNeedsRedraw(true)
+	w.needsRedraw = true
+
+	// Layout root to give it non-zero bounds (needed for collector).
+	spy.SetBounds(geometry.NewRect(0, 0, 100, 50))
+
+	w.DrawTo(canvas)
+	if !trackerSeen {
+		t.Error("DirtyTracker should be set on context during incremental draw")
+	}
+
+	// After DrawTo, the tracker should be cleared.
+	if w.ctx.DirtyTracker() != nil {
+		t.Error("DirtyTracker should be nil after DrawTo completes")
+	}
+}
+
+func TestWindow_DrawTo_DirtyTrackerClearedAfterDraw(t *testing.T) {
+	a := New()
+	w := a.Window()
+	root := newMockWidget()
+	w.SetRoot(root)
+
+	canvas := &mockCanvas{}
+	w.DrawTo(canvas)
+
+	// After any DrawTo, the dirty tracker reference on context should be nil.
+	if w.ctx.DirtyTracker() != nil {
+		t.Error("DirtyTracker should be nil after DrawTo completes")
+	}
+}
+
+// contextSpyWidget inspects the context during Draw.
+type contextSpyWidget struct {
+	widget.WidgetBase
+	onDraw func(ctx widget.Context)
+}
+
+func (w *contextSpyWidget) Layout(_ widget.Context, c geometry.Constraints) geometry.Size {
+	return c.Constrain(geometry.Sz(100, 50))
+}
+
+func (w *contextSpyWidget) Draw(ctx widget.Context, _ widget.Canvas) {
+	if w.onDraw != nil {
+		w.onDraw(ctx)
+	}
+}
+
+func (w *contextSpyWidget) Event(_ widget.Context, _ event.Event) bool { return false }
+
+var _ widget.Widget = (*contextSpyWidget)(nil)
 
 // --- Focus management tests ---
 
@@ -1453,4 +1542,221 @@ func TestWindow_AnimPumper_NotStartedWithoutWindowProvider(t *testing.T) {
 	if w.animToken != nil {
 		t.Error("animToken should be nil in headless mode (no WindowProvider)")
 	}
+}
+
+// --- Dirty Boundaries Tests (ADR-007 Task 1e) ---
+
+// mockRepaintBoundary implements widget.RepaintBoundaryMarker for testing.
+type mockRepaintBoundary struct {
+	key        uint64
+	dirtyCount int
+}
+
+func (m *mockRepaintBoundary) MarkBoundaryDirty() {
+	m.dirtyCount++
+}
+
+func TestWindow_DirtyBoundaries_Initial(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	if w.HasDirtyBoundaries() {
+		t.Error("new window should have no dirty boundaries")
+	}
+	if w.DirtyBoundaryCount() != 0 {
+		t.Errorf("expected 0 dirty boundaries, got %d", w.DirtyBoundaryCount())
+	}
+}
+
+func TestWindow_DirtyBoundaries_AddAndCount(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb1 := &mockRepaintBoundary{key: 1}
+	rb2 := &mockRepaintBoundary{key: 2}
+
+	w.AddDirtyBoundary(rb1.key, rb1)
+	w.AddDirtyBoundary(rb2.key, rb2)
+
+	if !w.HasDirtyBoundaries() {
+		t.Error("should have dirty boundaries after Add")
+	}
+	if w.DirtyBoundaryCount() != 2 {
+		t.Errorf("expected 2 dirty boundaries, got %d", w.DirtyBoundaryCount())
+	}
+}
+
+func TestWindow_DirtyBoundaries_Deduplication(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb := &mockRepaintBoundary{key: 42}
+
+	w.AddDirtyBoundary(rb.key, rb)
+	w.AddDirtyBoundary(rb.key, rb) // Same key — should deduplicate.
+
+	if w.DirtyBoundaryCount() != 1 {
+		t.Errorf("expected 1 dirty boundary (deduplicated), got %d", w.DirtyBoundaryCount())
+	}
+}
+
+func TestWindow_DirtyBoundaries_Clear(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb1 := &mockRepaintBoundary{key: 1}
+	rb2 := &mockRepaintBoundary{key: 2}
+
+	w.AddDirtyBoundary(rb1.key, rb1)
+	w.AddDirtyBoundary(rb2.key, rb2)
+
+	w.ClearDirtyBoundaries()
+
+	if w.HasDirtyBoundaries() {
+		t.Error("should have no dirty boundaries after Clear")
+	}
+	if w.DirtyBoundaryCount() != 0 {
+		t.Errorf("expected 0 dirty boundaries after Clear, got %d", w.DirtyBoundaryCount())
+	}
+}
+
+func TestWindow_DirtyBoundaries_ClearAndReuse(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb := &mockRepaintBoundary{key: 1}
+	w.AddDirtyBoundary(rb.key, rb)
+	w.ClearDirtyBoundaries()
+
+	// After clear, adding again should work.
+	rb2 := &mockRepaintBoundary{key: 2}
+	w.AddDirtyBoundary(rb2.key, rb2)
+
+	if w.DirtyBoundaryCount() != 1 {
+		t.Errorf("expected 1 dirty boundary after clear+add, got %d", w.DirtyBoundaryCount())
+	}
+}
+
+// --- Boundary Damage Region Tests (ADR-007 Phase 3, Task 3d) ---
+
+func TestWindow_BoundaryDamageRegion_Empty(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	// No dirty boundaries → empty damage region.
+	r := w.BoundaryDamageRegion()
+	if !r.IsEmpty() {
+		t.Errorf("expected empty damage region, got %v", r)
+	}
+}
+
+func TestWindow_BoundaryDamageRegion_SingleBoundary(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb := &mockBoundaryWithBounds{
+		mockRepaintBoundary: mockRepaintBoundary{key: 1},
+		bounds:              geometry.NewRect(10, 20, 100, 50),
+	}
+	w.AddDirtyBoundary(rb.key, rb)
+
+	r := w.BoundaryDamageRegion()
+	if r.Min.X != 10 || r.Min.Y != 20 || r.Max.X != 110 || r.Max.Y != 70 {
+		t.Errorf("damage region = %v, want (10,20)-(110,70)", r)
+	}
+}
+
+func TestWindow_BoundaryDamageRegion_MultipleBoundaries(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb1 := &mockBoundaryWithBounds{
+		mockRepaintBoundary: mockRepaintBoundary{key: 1},
+		bounds:              geometry.NewRect(10, 10, 50, 50),
+	}
+	rb2 := &mockBoundaryWithBounds{
+		mockRepaintBoundary: mockRepaintBoundary{key: 2},
+		bounds:              geometry.NewRect(200, 150, 80, 60),
+	}
+	w.AddDirtyBoundary(rb1.key, rb1)
+	w.AddDirtyBoundary(rb2.key, rb2)
+
+	r := w.BoundaryDamageRegion()
+
+	// Union should cover both: min(10,10) to max(280,210).
+	if r.Min.X != 10 || r.Min.Y != 10 {
+		t.Errorf("damage region min = (%v,%v), want (10,10)", r.Min.X, r.Min.Y)
+	}
+	if r.Max.X != 280 || r.Max.Y != 210 {
+		t.Errorf("damage region max = (%v,%v), want (280,210)", r.Max.X, r.Max.Y)
+	}
+}
+
+func TestWindow_BoundaryDamageRegion_ScreenBoundsPreferred(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb := &mockBoundaryWithScreenBounds{
+		mockRepaintBoundary: mockRepaintBoundary{key: 1},
+		bounds:              geometry.NewRect(0, 0, 50, 50),
+		screenBounds:        geometry.NewRect(100, 200, 50, 50),
+	}
+	w.AddDirtyBoundary(rb.key, rb)
+
+	r := w.BoundaryDamageRegion()
+
+	// Should use ScreenBounds (100,200)-(150,250), not Bounds (0,0)-(50,50).
+	if r.Min.X != 100 || r.Min.Y != 200 {
+		t.Errorf("damage region min = (%v,%v), want (100,200)", r.Min.X, r.Min.Y)
+	}
+}
+
+func TestWindow_BoundaryDamageRegion_ClearedAfterPaint(t *testing.T) {
+	a := New()
+	w := a.Window()
+
+	rb := &mockBoundaryWithBounds{
+		mockRepaintBoundary: mockRepaintBoundary{key: 1},
+		bounds:              geometry.NewRect(10, 10, 50, 50),
+	}
+	w.AddDirtyBoundary(rb.key, rb)
+
+	r := w.BoundaryDamageRegion()
+	if r.IsEmpty() {
+		t.Fatal("pre-condition: damage region should not be empty")
+	}
+
+	w.PaintDirtyBoundaries()
+
+	r = w.BoundaryDamageRegion()
+	if !r.IsEmpty() {
+		t.Error("damage region should be empty after PaintDirtyBoundaries")
+	}
+}
+
+// --- mockBoundaryWithBounds implements RepaintBoundaryMarker + Bounds() ---
+
+type mockBoundaryWithBounds struct {
+	mockRepaintBoundary
+	bounds geometry.Rect
+}
+
+func (m *mockBoundaryWithBounds) Bounds() geometry.Rect {
+	return m.bounds
+}
+
+// --- mockBoundaryWithScreenBounds implements ScreenBounds + Bounds ---
+
+type mockBoundaryWithScreenBounds struct {
+	mockRepaintBoundary
+	bounds       geometry.Rect
+	screenBounds geometry.Rect
+}
+
+func (m *mockBoundaryWithScreenBounds) Bounds() geometry.Rect {
+	return m.bounds
+}
+
+func (m *mockBoundaryWithScreenBounds) ScreenBounds() geometry.Rect {
+	return m.screenBounds
 }

@@ -72,7 +72,7 @@ cd ui/examples/hello
 go run .
 ```
 
-Here is a minimal example showing the widget toolkit:
+Here is a minimal example using `desktop.Run` (recommended):
 
 ```go
 package main
@@ -80,13 +80,11 @@ package main
 import (
     "log"
 
-    "github.com/gogpu/gg"
     _ "github.com/gogpu/gg/gpu"
-    "github.com/gogpu/gg/integration/ggcanvas"
     "github.com/gogpu/gogpu"
     "github.com/gogpu/ui/app"
+    "github.com/gogpu/ui/desktop"
     "github.com/gogpu/ui/primitives"
-    "github.com/gogpu/ui/render"
     "github.com/gogpu/ui/widget"
 )
 
@@ -113,31 +111,7 @@ func main() {
         ).Padding(24).Gap(12).Background(widget.RGBA8(255, 255, 255, 255)),
     )
 
-    var canvas *ggcanvas.Canvas
-    gogpuApp.OnDraw(func(dc *gogpu.Context) {
-        w, h := dc.Width(), dc.Height()
-        if canvas == nil {
-            var err error
-            canvas, err = ggcanvas.New(gogpuApp.GPUContextProvider(), w, h)
-            if err != nil {
-                log.Fatal(err)
-            }
-        }
-        uiApp.Frame()
-        sv := dc.SurfaceView()
-        sw, sh := dc.SurfaceSize()
-        gg.SetAcceleratorSurfaceTarget(sv, sw, sh)
-        canvas.Draw(func(cc *gg.Context) {
-            cc.SetRGBA(0.94, 0.94, 0.94, 1)
-            cc.DrawRectangle(0, 0, float64(w), float64(h))
-            cc.Fill()
-            uiApp.Window().DrawTo(render.NewCanvas(cc, w, h))
-        })
-        _ = canvas.RenderDirect(sv, sw, sh)
-    })
-    gogpuApp.OnClose(func() { gg.CloseAccelerator() })
-
-    if err := gogpuApp.Run(); err != nil {
+    if err := desktop.Run(gogpuApp, uiApp); err != nil {
         log.Fatal(err)
     }
 }
@@ -228,10 +202,11 @@ func main() {
 | `icon` | SVG icons (JetBrains expui), vector path icons, De Casteljau bezier, gg/svg renderer | 97%+ |
 | `i18n` | Internationalization: Locale, Bundle, Translator, CLDR plural rules, RTL, LocaleSignal | 97.9% |
 | `dnd` | Drag and drop: DragSource/DropTarget interfaces, Manager, 5px threshold, Escape cancel | 99.3% |
+| `offscreen` | Headless widget rendering: CPU-only `*image.RGBA` output, no GPU/window/app required | 100% |
 | `uitest` | Testing utilities: MockCanvas, MockContext, event factories, widget helpers, assertions | 93.1% |
 | `internal/dirty` | Dirty region tracking: Collector, Tracker, merge algorithm, partial repaints | 100% |
 
-**Total: ~150,000 lines of code | 55+ packages | ~6,000 tests | ~97% average coverage**
+**Total: ~171,000 lines of code | 55+ packages | ~6,800 tests | ~97% average coverage**
 
 ---
 
@@ -263,6 +238,9 @@ func main() {
 ├─────────────────────────────────────────────────────────────┤
 │  app/ + FocusManager │  focus/ │  overlay/ │  render/       │
 ├─────────────────────────────────────────────────────────────┤
+│  desktop/            (scene composition compositor, ADR-007) │
+│  offscreen/          (headless widget → *image.RGBA)        │
+├─────────────────────────────────────────────────────────────┤
 │  layout/           │  state/         │  a11y/               │
 │  Flex, Stack, Grid │  Signals, Bind  │  ARIA Roles, Tree    │
 ├─────────────────────────────────────────────────────────────┤
@@ -273,8 +251,8 @@ func main() {
 │  Canvas, Lifecycle │  Wheel, Focus   │  Constraints         │
 ├─────────────────────────────────────────────────────────────┤
 │  internal/render   │  internal/layout│  internal/focus      │
-│  Canvas, Scene     │  Flex, Grid     │  Manager, Ring       │
-│  internal/dirty    │                 │                      │
+│  Canvas, Scene,    │  Flex, Grid     │  Manager, Ring       │
+│  ImageCache (LRU)  │  internal/dirty │  Tracker, Collector  │
 ├─────────────────────────────────────────────────────────────┤
 │  gogpu/gg          │  gpucontext     │  coregx/signals      │
 │  2D Graphics       │  Shared Ifaces  │  State Management    │
@@ -305,6 +283,7 @@ gg → wgpu → naga                   ← internal to gg
 | [`examples/taskmanager`](examples/taskmanager) | Full task manager: charts, tables, animations, real-time data |
 | [`examples/gallery`](examples/gallery) | Widget gallery: all 22 widgets, 4 design systems (M3/DevTools/Fluent/Cupertino), theme switching |
 | [`examples/ide`](examples/ide) | GoLand-inspired IDE layout: DevTools theme, toolbar, tree, tabs, terminal, SVG icons |
+| [`examples/modular-compositor`](examples/modular-compositor) | Multi-module offscreen rendering: clock + notification compositor ([#75](https://github.com/gogpu/ui/issues/75)) |
 
 Run any example:
 
@@ -544,6 +523,24 @@ button := a11y.NewNode(a11y.RoleButton, "Save")  // stable uint64 ID
 tree.Insert(root, button)
 ```
 
+### Offscreen Rendering
+
+```go
+// Render widgets to image without GPU, window, or app
+r := offscreen.NewRenderer(400, 120)
+r.Render(primitives.Text("Hello, World!").FontSize(24))
+img := r.Image() // *image.RGBA — ready for png.Encode, testing, compositing
+
+// HiDPI with dark theme and white background
+dark := material3.NewDark(widget.Hex(0x00BFA5))
+r := offscreen.NewRenderer(800, 240,
+    offscreen.WithTheme(dark),
+    offscreen.WithScale(2.0),
+    offscreen.WithBackground(widget.ColorWhite),
+)
+r.Render(myWidgetTree)
+```
+
 ### Window Integration
 
 ```go
@@ -651,6 +648,12 @@ testApp.Window().Frame()  // processes layout + draw
 - [x] OnTextInput handler (platform character input API)
 - [x] Task Manager example (charts, tables, animations)
 - [x] Widget Gallery example (all widgets, 4 design systems, theme switching)
+- [x] Incremental rendering pipeline (ADR-004): frame skip, persistent pixmap, dirty regions
+- [x] Auto RepaintBoundary in ListView (per-item pixel caching)
+- [x] DrawStats observability (CachedWidgets, DirtyRegionCount)
+- [x] Tracker.Intersects() fast path in RepaintBoundary
+- [x] Centralized ImageCache with LRU eviction (64MB, thread-safe)
+- [x] Offscreen renderer (headless widget → *image.RGBA, no GPU/window)
 - [ ] Platform accessibility adapters (UIA, AT-SPI2, NSAccessibility)
 - [ ] Performance optimization pass
 

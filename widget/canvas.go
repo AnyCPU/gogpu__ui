@@ -3,6 +3,7 @@ package widget
 import (
 	"image"
 
+	"github.com/gogpu/gg/scene"
 	"github.com/gogpu/ui/geometry"
 )
 
@@ -80,6 +81,12 @@ type Canvas interface {
 	// DrawRect fills a rectangle with the given color.
 	DrawRect(r geometry.Rect, color Color)
 
+	// FillRectDirect fills a rectangle using CPU-only rendering, bypassing
+	// the GPU shape accelerator. Used for dirty-region background clearing
+	// where GPU acceleration is counterproductive (it blocks the compositor
+	// non-MSAA blit-only fast path, causing 10x GPU overhead).
+	FillRectDirect(r geometry.Rect, color Color)
+
 	// StrokeRect draws the outline of a rectangle.
 	//
 	// The strokeWidth specifies the line thickness in logical pixels.
@@ -100,6 +107,12 @@ type Canvas interface {
 
 	// StrokeCircle draws the outline of a circle.
 	StrokeCircle(center geometry.Point, radius float32, color Color, strokeWidth float32)
+
+	// StrokeArc draws a circular arc outline from startAngle with the given sweep.
+	// Angles are in radians. startAngle=0 is 3 o'clock, positive is counterclockwise.
+	// The arc is rendered as a single stroke operation using cubic Bézier curves.
+	StrokeArc(center geometry.Point, radius float32, startAngle, sweepAngle float64,
+		color Color, strokeWidth float32)
 
 	// DrawLine draws a line between two points.
 	DrawLine(from, to geometry.Point, color Color, strokeWidth float32)
@@ -158,6 +171,43 @@ type Canvas interface {
 	// Used by [StampScreenOrigin] to compute a widget's screen-space
 	// position during the Draw pass.
 	TransformOffset() geometry.Point
+
+	// ClipBounds returns the current clip rectangle.
+	//
+	// This is the intersection of all PushClip/PushClipRoundRect regions
+	// currently on the clip stack. Used for viewport culling: containers
+	// skip Draw on children whose bounds don't intersect the clip region,
+	// preventing offscreen widgets from ticking animations.
+	ClipBounds() geometry.Rect
+
+	// ReplayScene renders a previously recorded scene.Scene display list
+	// into this canvas. Used by RepaintBoundary to replay cached content
+	// without re-executing the child widget's Draw method.
+	//
+	// For Canvas (gg.Context wrapper): renders the scene via GPU scene
+	// renderer, which routes commands through gg.Context's GPU accelerator.
+	// For SceneCanvas: merges the child scene into the parent scene via
+	// Scene.Append (O(commands), zero re-encoding).
+	//
+	// If s is nil or empty, this is a no-op.
+	ReplayScene(s *scene.Scene)
+}
+
+// LineCap specifies how the endpoints of stroked arcs and lines are drawn.
+type LineCap uint8
+
+const (
+	LineCapButt   LineCap = iota // flat end, stops exactly at endpoint
+	LineCapRound                 // semicircle extending past endpoint
+	LineCapSquare                // half-square extending past endpoint
+)
+
+// ArcStroker is an optional interface for canvases that support styled arc strokes.
+// Use type assertion to check: if s, ok := canvas.(ArcStroker); ok { ... }
+type ArcStroker interface {
+	// StrokeArcStyled draws a circular arc with the specified line cap style.
+	StrokeArcStyled(center geometry.Point, radius float32, startAngle, sweepAngle float64,
+		color Color, strokeWidth float32, lineCap LineCap)
 }
 
 // SVGFiller is an optional interface for canvases that support SVG path fill.

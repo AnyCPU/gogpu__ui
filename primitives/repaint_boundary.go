@@ -1,10 +1,8 @@
 package primitives
 
 import (
-	"image"
-	"image/draw"
+	"sync/atomic"
 
-	"github.com/gogpu/gg"
 	"github.com/gogpu/gg/scene"
 	"github.com/gogpu/ui/a11y"
 	"github.com/gogpu/ui/event"
@@ -13,32 +11,28 @@ import (
 	"github.com/gogpu/ui/widget"
 )
 
-// sceneThresholdPixels is the minimum area (in pixels) for scene.Renderer
-// activation. RepaintBoundaries with area below this threshold use the
-// traditional gg.Context path (lower overhead for small widgets).
-// RepaintBoundaries at or above this threshold use scene.Scene with
-// tile-parallel rendering for better performance on large subtrees.
-const sceneThresholdPixels = 128 * 128
+// nextCacheKey is a monotonic counter for generating unique cache keys.
+// Each RepaintBoundary gets a unique uint64 ID at creation time, used as
+// the key into the dirty boundary tracking set. Atomic to be safe for
+// concurrent RepaintBoundary creation across goroutines.
+var nextCacheKey atomic.Uint64
 
 // RepaintBoundary is a display widget that caches its child subtree as a
-// CPU-side pixel buffer (image.RGBA). When the child subtree is clean (no
-// dirty widgets), the cached image is composited directly onto the parent
-// canvas instead of re-executing Draw on every descendant.
+// scene.Scene display list. When the child subtree is clean (no dirty
+// widgets), the cached display list is replayed into the parent canvas
+// instead of re-executing Draw on every descendant.
 //
-// This is the Flutter RepaintBoundary pattern: an explicit opt-in boundary
-// that isolates expensive subtrees from the rest of the render tree.
-// Users wrap widgets in RepaintBoundary at points where subtrees are
-// expensive to draw and rarely change.
-//
-// For large widgets (>= 128x128 pixels), RepaintBoundary uses scene.Scene
-// with tile-parallel rendering via scene.Renderer, providing better
-// performance for complex subtrees. Small widgets use the traditional
-// gg.Context path to avoid overhead.
+// This is the Flutter RepaintBoundary / PictureLayer pattern: an explicit
+// opt-in boundary that isolates expensive subtrees from the rest of the
+// render tree. Display lists are portable across all gg backends (Vulkan,
+// DX12, Metal, GLES, Software, future WASM/WebGPU).
 //
 // Cache lifecycle:
-//   - The cache is allocated on first draw (lazy).
-//   - The cache is invalidated when any descendant is dirty or the size changes.
-//   - The cache is freed on Unmount or when the widget is garbage collected.
+//   - The cached scene is allocated on first draw (lazy).
+//   - The cache is invalidated when any descendant calls SetNeedsRedraw,
+//     which propagates UP to the boundary (ADR-007 upward propagation),
+//     or when the widget size changes.
+//   - The cache is freed on Unmount.
 //
 // RepaintBoundary implements [widget.Widget] and [a11y.Accessible].
 //
@@ -54,12 +48,20 @@ type RepaintBoundary struct {
 
 	child widget.Widget
 
-	// cache holds the rendered child subtree as an RGBA pixmap.
-	cache *image.RGBA
-	// cacheValid indicates whether the cache is up to date.
-	cacheValid bool
+	// cacheKey is a unique monotonic ID for this boundary, used as the key
+	// into the Window's dirty boundary set. Assigned once at creation time.
+	cacheKey uint64
+
+	// cachedScene holds the recorded display list (scene.Scene) for the
+	// child subtree. On cache hit, this is replayed into the parent canvas
+	// via Canvas.ReplayScene — no child.Draw() re-execution needed.
+	cachedScene *scene.Scene
+
+	// cacheVersion is a monotonic counter incremented each time the cache
+	// is refreshed. Used for observability and diagnostics.
+	cacheVersion uint64
 	// cacheWidth and cacheHeight track the cache dimensions to detect
-	// size changes that require reallocation.
+	// size changes that require re-recording.
 	cacheWidth  int
 	cacheHeight int
 
@@ -69,10 +71,42 @@ type RepaintBoundary struct {
 	// cacheHits tracks how many times the cache was used (for stats).
 	cacheHits int
 
-	// scene.Scene integration (lazily initialized for large widgets).
-	sceneRenderer *scene.Renderer
-	sceneObj      *scene.Scene
-	pixmap        *gg.Pixmap
+	// boundaryDirty indicates that a descendant has changed and this
+	// boundary's cache needs to be re-recorded. Set by upward dirty
+	// propagation (ADR-007) via [MarkBoundaryDirty].
+	boundaryDirty bool
+
+	// onBoundaryDirty is a callback invoked when this boundary transitions
+	// from clean to dirty. Used by the Window to collect dirty boundaries
+	// into its dirtyBoundaries set (ADR-007, Task 1e).
+	onBoundaryDirty func(rb *RepaintBoundary)
+
+	// --- RasterCache (ADR-007 Phase 3, Task 3a) ---
+
+	// rasterCacheCfg holds the heuristic parameters for stability tracking.
+	// Initialized to DefaultRasterCacheConfig in NewRepaintBoundary.
+	rasterCacheCfg RasterCacheConfig
+
+	// consecutiveHits tracks the number of consecutive cache hits since
+	// the last cache miss. Used by the raster cache heuristic to decide
+	// when to promote the boundary to stable status.
+	consecutiveHits int
+
+	// stable indicates that this boundary has been promoted by the raster
+	// cache heuristic. Stable boundaries rarely change and are candidates
+	// for GPU texture caching (future Phase 4).
+	stable bool
+
+	// totalPromotions counts cumulative promotions for diagnostics.
+	totalPromotions int
+
+	// totalDemotions counts cumulative demotions for diagnostics.
+	totalDemotions int
+
+	// lastSceneVersion tracks the scene version from the last Draw call.
+	// Used by the damage-aware compositor (Task 3d) to detect when a
+	// boundary's scene content has actually changed between frames.
+	lastSceneVersion uint64
 }
 
 // Option configures a [RepaintBoundary].
@@ -86,7 +120,7 @@ func WithDebugLabel(label string) Option {
 }
 
 // NewRepaintBoundary creates a RepaintBoundary that caches the rendering
-// of the given child widget.
+// of the given child widget as a scene.Scene display list.
 //
 // If child is nil, the boundary renders nothing and reports zero size.
 //
@@ -94,7 +128,9 @@ func WithDebugLabel(label string) Option {
 //   - [WithDebugLabel] — optional label for diagnostics
 func NewRepaintBoundary(child widget.Widget, opts ...Option) *RepaintBoundary {
 	rb := &RepaintBoundary{
-		child: child,
+		child:          child,
+		cacheKey:       nextCacheKey.Add(1),
+		rasterCacheCfg: DefaultRasterCacheConfig(),
 	}
 	rb.SetVisible(true)
 	rb.SetEnabled(true)
@@ -104,6 +140,11 @@ func NewRepaintBoundary(child widget.Widget, opts ...Option) *RepaintBoundary {
 	}
 
 	return rb
+}
+
+// CacheKey returns the unique monotonic ID for this boundary.
+func (rb *RepaintBoundary) CacheKey() uint64 {
+	return rb.cacheKey
 }
 
 // Child returns the wrapped child widget.
@@ -121,16 +162,165 @@ func (rb *RepaintBoundary) CacheHits() int {
 	return rb.cacheHits
 }
 
-// CacheValid reports whether the cache currently holds valid content.
+// CacheValid reports whether the cached scene holds valid content.
 func (rb *RepaintBoundary) CacheValid() bool {
-	return rb.cacheValid
+	return !rb.boundaryDirty && rb.cachedScene != nil
 }
 
-// InvalidateCache marks the cache as stale, forcing a re-render on the
+// InvalidateCache marks the cache as stale, forcing a re-record on the
 // next draw pass. This is called automatically when descendants are dirty;
 // manual invocation is rarely needed.
 func (rb *RepaintBoundary) InvalidateCache() {
-	rb.cacheValid = false
+	rb.boundaryDirty = true
+}
+
+// MarkBoundaryDirty marks this repaint boundary as needing re-rendering.
+//
+// Called by the upward dirty propagation in [widget.WidgetBase.SetNeedsRedraw]
+// when a descendant widget changes. This invalidates the scene cache and
+// notifies the Window (via callback) to add this boundary to its dirty set.
+//
+// Implements [widget.RepaintBoundaryMarker].
+func (rb *RepaintBoundary) MarkBoundaryDirty() {
+	if rb.boundaryDirty {
+		return // Already dirty — O(1) guard.
+	}
+	rb.boundaryDirty = true
+
+	// Reset consecutive hits on dirty — the boundary is no longer in a
+	// consecutive-cache-hit streak. Demotion from stable happens in Draw
+	// (cache miss path) to keep MarkBoundaryDirty O(1).
+	rb.consecutiveHits = 0
+
+	if rb.onBoundaryDirty != nil {
+		rb.onBoundaryDirty(rb)
+	}
+}
+
+// IsBoundaryDirty reports whether this boundary has been marked dirty by
+// upward propagation since the last draw pass.
+func (rb *RepaintBoundary) IsBoundaryDirty() bool {
+	return rb.boundaryDirty
+}
+
+// ClearBoundaryDirty resets the boundary dirty flag after the boundary
+// has been repainted. Called by the Window after painting dirty boundaries.
+func (rb *RepaintBoundary) ClearBoundaryDirty() {
+	rb.boundaryDirty = false
+}
+
+// SetOnBoundaryDirty sets the callback invoked when this boundary
+// transitions from clean to dirty via upward propagation.
+//
+// Used by the Window to collect dirty boundaries into its set.
+func (rb *RepaintBoundary) SetOnBoundaryDirty(fn func(rb *RepaintBoundary)) {
+	rb.onBoundaryDirty = fn
+}
+
+// --- RasterCache (ADR-007 Phase 3, Task 3a) ---
+
+// IsStable reports whether this boundary has been promoted to stable status
+// by the raster cache heuristic. Stable boundaries have had consecutive
+// cache hits >= the promotion threshold, with sufficient complexity and area.
+//
+// Stable boundaries are candidates for GPU texture caching (future Phase 4).
+// The compositor can use this to prioritize GPU texture allocation.
+func (rb *RepaintBoundary) IsStable() bool {
+	return rb.stable
+}
+
+// ConsecutiveHits returns the number of consecutive cache hits since the
+// last cache miss. Used for observability and testing.
+func (rb *RepaintBoundary) ConsecutiveHits() int {
+	return rb.consecutiveHits
+}
+
+// RasterCacheStats returns a snapshot of the raster cache state for this
+// boundary. Used for diagnostics, benchmarks, and compositor decisions.
+func (rb *RepaintBoundary) RasterCacheStats() RasterCacheStats {
+	var tagCount int
+	if rb.cachedScene != nil {
+		tagCount = len(rb.cachedScene.Encoding().Tags())
+	}
+
+	return RasterCacheStats{
+		ConsecutiveHits: rb.consecutiveHits,
+		IsStable:        rb.stable,
+		TagCount:        tagCount,
+		Area:            rb.cacheWidth * rb.cacheHeight,
+		TotalPromotions: rb.totalPromotions,
+		TotalDemotions:  rb.totalDemotions,
+	}
+}
+
+// evaluatePromotion checks whether this boundary qualifies for promotion
+// to stable status based on the raster cache heuristic.
+//
+// Criteria (Flutter raster_cache.cc pattern):
+//   - consecutiveHits >= PromotionThreshold
+//   - tag count > MinComplexity
+//   - pixel area >= MinArea
+func (rb *RepaintBoundary) evaluatePromotion(w, h int) {
+	if rb.stable {
+		return // Already promoted.
+	}
+
+	cfg := rb.rasterCacheCfg
+	if rb.consecutiveHits < cfg.PromotionThreshold {
+		return
+	}
+
+	area := w * h
+	if area < cfg.MinArea {
+		return
+	}
+
+	if rb.cachedScene == nil {
+		return
+	}
+	tagCount := len(rb.cachedScene.Encoding().Tags())
+	if tagCount < cfg.MinComplexity {
+		return
+	}
+
+	rb.stable = true
+	rb.totalPromotions++
+}
+
+// demoteIfStable resets stable status when the boundary is invalidated.
+// Called on cache miss (boundary dirty or first draw).
+func (rb *RepaintBoundary) demoteIfStable() {
+	if !rb.stable {
+		return
+	}
+	rb.stable = false
+	rb.totalDemotions++
+}
+
+// --- Damage-Aware Compositor (ADR-007 Phase 3, Task 3d) ---
+
+// SceneVersion returns a monotonic counter that increments each time the
+// boundary's scene cache is re-recorded. The compositor uses this to detect
+// when a boundary's content has actually changed between frames.
+//
+// When SceneVersion() == lastObservedVersion, the boundary's scene has not
+// changed and the compositor can skip re-compositing this region.
+func (rb *RepaintBoundary) SceneVersion() uint64 {
+	return rb.cacheVersion
+}
+
+// SceneChanged reports whether the boundary's scene has changed since the
+// given version. Used by the compositor to determine which boundaries
+// need re-compositing in the damage-aware pipeline (Task 3d).
+//
+// Usage:
+//
+//	if rb.SceneChanged(lastVersion) {
+//	    // Re-composite this boundary's region.
+//	    lastVersion = rb.SceneVersion()
+//	}
+func (rb *RepaintBoundary) SceneChanged(sinceVersion uint64) bool {
+	return rb.cacheVersion != sinceVersion
 }
 
 // --- widget.Widget interface ---
@@ -156,7 +346,7 @@ func (rb *RepaintBoundary) Layout(ctx widget.Context, constraints geometry.Const
 	w := int(size.Width)
 	h := int(size.Height)
 	if w != rb.cacheWidth || h != rb.cacheHeight {
-		rb.cacheValid = false
+		rb.boundaryDirty = true
 		rb.cacheWidth = w
 		rb.cacheHeight = h
 	}
@@ -164,18 +354,30 @@ func (rb *RepaintBoundary) Layout(ctx widget.Context, constraints geometry.Const
 	return size
 }
 
-// Draw renders the child subtree, using the pixel cache when possible.
+// Draw renders the child subtree, using the scene cache when possible.
 //
-// If the child subtree is clean and the cache is valid, the cached image
-// is composited directly. Otherwise, the child is rendered into an offscreen
-// buffer, the result is captured as the new cache, and then composited.
+// On cache hit (boundary not dirty, cached scene exists): replays the
+// cached scene.Scene into the canvas via Canvas.ReplayScene — no child
+// re-execution. This is O(commands) via Encoding.Append or GPU dispatch.
+//
+// On cache miss (boundary dirty or first draw): records child.Draw into
+// a new scene.Scene via SceneCanvas, then replays the result.
+//
+// This is the ADR-007 retained-mode pattern: display list per boundary.
 func (rb *RepaintBoundary) Draw(ctx widget.Context, canvas widget.Canvas) {
-	if !rb.IsVisible() {
+	if !rb.IsVisible() || rb.child == nil {
 		return
 	}
 
-	if rb.child == nil {
-		return
+	// Wire the onBoundaryDirty callback on first Draw so that future
+	// SetNeedsRedraw → propagateDirtyUpward → MarkBoundaryDirty
+	// triggers RequestRedraw on the window. Without this, dirty flags
+	// are set but the render loop never wakes up (ADR-007 fix).
+	if rb.onBoundaryDirty == nil && ctx != nil {
+		capturedCtx := ctx
+		rb.onBoundaryDirty = func(_ *RepaintBoundary) {
+			capturedCtx.InvalidateRect(rb.Bounds())
+		}
 	}
 
 	bounds := rb.Bounds()
@@ -185,115 +387,56 @@ func (rb *RepaintBoundary) Draw(ctx widget.Context, canvas widget.Canvas) {
 		return
 	}
 
-	// Check if the child subtree needs redrawing.
-	subtreeDirty := widget.NeedsRedrawInTree(rb.child)
-
-	if rb.cacheValid && !subtreeDirty {
-		// Cache hit: blit the cached image directly.
-		rb.cacheHits++
-		canvas.DrawImage(rb.cache, bounds.Min)
+	// Cache hit: boundary is clean and we have a cached scene.
+	if !rb.boundaryDirty && rb.cachedScene != nil {
+		rb.recordCacheHit(ctx)
+		rb.consecutiveHits++
+		rb.evaluatePromotion(w, h)
+		canvas.PushTransform(bounds.Min)
+		canvas.ReplayScene(rb.cachedScene)
+		canvas.PopTransform()
 		return
 	}
 
-	// Cache miss: render child into offscreen context.
-	rb.renderToCache(ctx, w, h)
+	// Cache miss: reset consecutive hits and demote if stable.
+	rb.demoteIfStable()
+	rb.consecutiveHits = 0
+
+	// Record child drawing into a scene.
+	if rb.cachedScene == nil {
+		rb.cachedScene = scene.NewScene()
+	}
+	rb.cachedScene.Reset()
+
+	recorder := internalRender.NewSceneCanvas(rb.cachedScene, w, h)
+	rb.child.Draw(ctx, recorder)
+	recorder.Close()
 
 	// Clear redraw flags in the child subtree since we just rendered them.
 	widget.ClearRedrawInTree(rb.child)
 
-	// Blit the freshly rendered cache.
-	canvas.DrawImage(rb.cache, bounds.Min)
+	rb.boundaryDirty = false
+	rb.cacheVersion++
+	rb.lastSceneVersion = rb.cacheVersion
+
+	// Replay the freshly recorded scene into the parent canvas.
+	canvas.PushTransform(bounds.Min)
+	canvas.ReplayScene(rb.cachedScene)
+	canvas.PopTransform()
 }
 
-// renderToCache selects the rendering strategy based on widget area.
-// Large widgets (>= sceneThresholdPixels) use scene.Scene with tile-parallel
-// rendering for better performance. Small widgets use the traditional
-// gg.Context path to avoid the overhead of scene setup.
-func (rb *RepaintBoundary) renderToCache(ctx widget.Context, w, h int) {
-	if w*h >= sceneThresholdPixels {
-		rb.renderWithScene(ctx, w, h)
-	} else {
-		rb.renderWithContext(ctx, w, h)
+// recordCacheHit increments the cache hit counter and records the hit
+// in the frame-level DrawStats for observability.
+func (rb *RepaintBoundary) recordCacheHit(ctx widget.Context) {
+	rb.cacheHits++
+
+	provider, ok := ctx.(widget.DrawStatsProvider)
+	if !ok {
+		return
 	}
-}
-
-// renderWithContext is the original gg.Context-based rendering path.
-// Used for small widgets where scene.Renderer overhead is not justified.
-func (rb *RepaintBoundary) renderWithContext(ctx widget.Context, w, h int) {
-	// Create offscreen gg.Context.
-	dc := gg.NewContext(w, h)
-
-	// Wrap in Canvas for the widget system.
-	offscreen := internalRender.NewCanvas(dc, w, h)
-
-	// Clear with transparent background so the cache composites correctly.
-	offscreen.Clear(widget.ColorTransparent)
-
-	// Draw the child subtree into the offscreen canvas.
-	// The child's bounds are at (0,0) relative to this boundary,
-	// so no transform is needed.
-	rb.child.Draw(ctx, offscreen)
-
-	// Extract rendered pixels.
-	img := dc.Image()
-
-	// Convert to *image.RGBA for efficient compositing.
-	rb.cache = toRGBA(img)
-	rb.cacheValid = true
-
-	// Close the temporary context to free resources.
-	_ = dc.Close()
-}
-
-// renderWithScene uses scene.Scene + scene.Renderer for tile-parallel rendering.
-// The child subtree is drawn into a SceneCanvas (which records into scene.Scene),
-// then the scene is rendered via tile-parallel scene.Renderer into a Pixmap.
-func (rb *RepaintBoundary) renderWithScene(ctx widget.Context, w, h int) {
-	// Initialize or resize scene.Renderer.
-	if rb.sceneRenderer == nil || rb.sceneRenderer.Width() != w || rb.sceneRenderer.Height() != h {
-		if rb.sceneRenderer != nil {
-			rb.sceneRenderer.Close()
-		}
-		rb.sceneRenderer = scene.NewRenderer(w, h)
+	if stats := provider.DrawStats(); stats != nil {
+		stats.CachedWidgets++
 	}
-
-	// Initialize or resize Pixmap.
-	if rb.pixmap == nil || rb.pixmap.Width() != w || rb.pixmap.Height() != h {
-		rb.pixmap = gg.NewPixmap(w, h)
-	}
-
-	// Initialize scene (reuse across frames).
-	if rb.sceneObj == nil {
-		rb.sceneObj = scene.NewScene()
-	}
-
-	// Reset scene for this frame.
-	rb.sceneObj.Reset()
-
-	// Build scene from child tree via SceneCanvas adapter.
-	sceneCanvas := internalRender.NewSceneCanvas(rb.sceneObj, w, h)
-	rb.child.Draw(ctx, sceneCanvas)
-	sceneCanvas.Close()
-
-	// Clear pixmap and render the scene.
-	rb.pixmap.Clear(gg.Transparent)
-	_ = rb.sceneRenderer.Render(rb.pixmap, rb.sceneObj)
-
-	// Convert to image.RGBA for cache.
-	rb.cache = rb.pixmap.ToImage()
-	rb.cacheValid = true
-}
-
-// toRGBA converts an image.Image to *image.RGBA efficiently.
-// If the image is already *image.RGBA, it is returned directly.
-func toRGBA(img image.Image) *image.RGBA {
-	if rgba, ok := img.(*image.RGBA); ok {
-		return rgba
-	}
-	bounds := img.Bounds()
-	rgba := image.NewRGBA(bounds)
-	draw.Draw(rgba, bounds, img, bounds.Min, draw.Src)
-	return rgba
 }
 
 // Event dispatches events to the child.
@@ -324,22 +467,18 @@ func (rb *RepaintBoundary) Children() []widget.Widget {
 	return []widget.Widget{rb.child}
 }
 
-// Unmount releases the pixel cache and scene resources when the widget is
-// removed from the tree.
+// Unmount releases the scene cache when the widget is removed from the tree.
 func (rb *RepaintBoundary) Unmount() {
-	rb.cache = nil
-	rb.cacheValid = false
+	rb.cachedScene = nil
+	rb.cacheVersion = 0
 	rb.cacheWidth = 0
 	rb.cacheHeight = 0
 	rb.cacheHits = 0
-
-	// Release scene resources.
-	if rb.sceneRenderer != nil {
-		rb.sceneRenderer.Close()
-		rb.sceneRenderer = nil
-	}
-	rb.sceneObj = nil
-	rb.pixmap = nil
+	rb.boundaryDirty = false
+	// Reset raster cache state (Task 3a).
+	rb.consecutiveHits = 0
+	rb.stable = false
+	rb.lastSceneVersion = 0
 }
 
 // --- a11y.Accessible interface ---
@@ -379,6 +518,7 @@ func (rb *RepaintBoundary) AccessibilityActions() []a11y.Action {
 
 // Compile-time interface checks.
 var (
-	_ widget.Widget   = (*RepaintBoundary)(nil)
-	_ a11y.Accessible = (*RepaintBoundary)(nil)
+	_ widget.Widget                = (*RepaintBoundary)(nil)
+	_ widget.RepaintBoundaryMarker = (*RepaintBoundary)(nil)
+	_ a11y.Accessible              = (*RepaintBoundary)(nil)
 )

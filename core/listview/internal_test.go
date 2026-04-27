@@ -1,6 +1,7 @@
 package listview
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -835,18 +836,33 @@ func TestVirtualContent_Layout_InfiniteWidth(t *testing.T) {
 	}
 }
 
-// --- mockCanvas for internal tests ---
+// --- mock types for internal tests ---
+
+type mockWidget struct {
+	widget.WidgetBase
+}
+
+func (w *mockWidget) Layout(_ widget.Context, c geometry.Constraints) geometry.Size {
+	return c.Constrain(geometry.Sz(100, 48))
+}
+
+func (w *mockWidget) Draw(_ widget.Context, _ widget.Canvas) {}
+
+func (w *mockWidget) Event(_ widget.Context, _ event.Event) bool { return false }
 
 type mockCanvas struct{}
 
 func (m *mockCanvas) Clear(_ widget.Color)                                                  {}
 func (m *mockCanvas) DrawRect(_ geometry.Rect, _ widget.Color)                              {}
+func (m *mockCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color)                        {}
 func (m *mockCanvas) StrokeRect(_ geometry.Rect, _ widget.Color, _ float32)                 {}
 func (m *mockCanvas) DrawRoundRect(_ geometry.Rect, _ widget.Color, _ float32)              {}
 func (m *mockCanvas) StrokeRoundRect(_ geometry.Rect, _ widget.Color, _ float32, _ float32) {}
 func (m *mockCanvas) DrawCircle(_ geometry.Point, _ float32, _ widget.Color)                {}
 func (m *mockCanvas) StrokeCircle(_ geometry.Point, _ float32, _ widget.Color, _ float32)   {}
-func (m *mockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32)               {}
+func (m *mockCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
+}
+func (m *mockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32) {}
 func (m *mockCanvas) DrawText(_ string, _ geometry.Rect, _ float32, _ widget.Color, _ bool, _ widget.TextAlign) {
 }
 
@@ -860,6 +876,330 @@ func (m *mockCanvas) PopClip()                                     {}
 func (m *mockCanvas) PushTransform(_ geometry.Point)               {}
 func (m *mockCanvas) PopTransform()                                {}
 func (m *mockCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (m *mockCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (m *mockCanvas) ReplayScene(_ *scene.Scene)                   {}
+
+// --- RepaintBoundary integration tests ---
+
+func TestWidgetCache_BoundariesCreated(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		return w
+	}}
+
+	wc.update(0, 3, builder, -1, -1)
+
+	if len(wc.boundaries) != 3 {
+		t.Fatalf("len(boundaries) = %d, want 3", len(wc.boundaries))
+	}
+	for i := 0; i < 3; i++ {
+		if wc.boundaries[i] == nil {
+			t.Errorf("boundary[%d] is nil, want non-nil", i)
+		}
+	}
+}
+
+func TestWidgetCache_BoundaryAt(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		return w
+	}}
+
+	wc.update(0, 3, builder, -1, -1)
+
+	// Valid offsets.
+	for i := 0; i < 3; i++ {
+		rb := wc.boundaryAt(i)
+		if rb == nil {
+			t.Errorf("boundaryAt(%d) = nil, want non-nil", i)
+		}
+	}
+
+	// Out of range.
+	if rb := wc.boundaryAt(-1); rb != nil {
+		t.Error("boundaryAt(-1) should return nil")
+	}
+	if rb := wc.boundaryAt(3); rb != nil {
+		t.Error("boundaryAt(3) should return nil")
+	}
+
+	// Empty cache.
+	var empty widgetCache
+	if rb := empty.boundaryAt(0); rb != nil {
+		t.Error("boundaryAt on empty cache should return nil")
+	}
+}
+
+func TestWidgetCache_BoundaryNilForNilWidget(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		return nil // builder returns nil widget
+	}}
+
+	wc.update(0, 3, builder, -1, -1)
+
+	for i := 0; i < 3; i++ {
+		if rb := wc.boundaryAt(i); rb != nil {
+			t.Errorf("boundaryAt(%d) should be nil for nil widget", i)
+		}
+	}
+}
+
+func TestWidgetCache_BoundaryNilBuilder(t *testing.T) {
+	var wc widgetCache
+	wc.update(0, 3, nil, -1, -1)
+
+	for i := 0; i < 3; i++ {
+		if rb := wc.boundaryAt(i); rb != nil {
+			t.Errorf("boundaryAt(%d) should be nil with nil builder", i)
+		}
+	}
+}
+
+func TestWidgetCache_BoundaryWrapsCorrectChild(t *testing.T) {
+	var wc widgetCache
+	widgets := make([]*mockWidget, 3)
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		widgets[ctx.Index] = w
+		return w
+	}}
+
+	wc.update(0, 3, builder, -1, -1)
+
+	for i := 0; i < 3; i++ {
+		rb := wc.boundaryAt(i)
+		if rb == nil {
+			t.Fatalf("boundary[%d] is nil", i)
+		}
+		child := rb.Child()
+		if child != widgets[i] {
+			t.Errorf("boundary[%d].Child() != widget[%d]", i, i)
+		}
+	}
+}
+
+func TestWidgetCache_ClearUnmountsBoundaries(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		return w
+	}}
+
+	wc.update(0, 3, builder, -1, -1)
+
+	// Verify boundaries exist before clear.
+	for i := 0; i < 3; i++ {
+		if wc.boundaryAt(i) == nil {
+			t.Fatalf("boundary[%d] nil before clear", i)
+		}
+	}
+
+	wc.clear()
+
+	if len(wc.boundaries) != 0 {
+		t.Errorf("len(boundaries) = %d, want 0 after clear", len(wc.boundaries))
+	}
+}
+
+func TestWidgetCache_InvalidateRebuildsBoundaries(t *testing.T) {
+	var wc widgetCache
+	callCount := 0
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		callCount++
+		w := &mockWidget{}
+		w.SetVisible(true)
+		return w
+	}}
+
+	wc.update(0, 3, builder, -1, -1)
+	rb1 := wc.boundaryAt(0)
+	if rb1 == nil {
+		t.Fatal("boundary[0] nil before invalidate")
+	}
+
+	wc.invalidate()
+	wc.update(0, 3, builder, -1, -1)
+
+	rb2 := wc.boundaryAt(0)
+	if rb2 == nil {
+		t.Fatal("boundary[0] nil after rebuild")
+	}
+
+	// After invalidate + rebuild, the boundary should be a new instance
+	// because the widget was rebuilt.
+	if rb1 == rb2 {
+		t.Error("boundary should be a new instance after invalidate + rebuild")
+	}
+
+	if callCount != 6 {
+		t.Errorf("callCount = %d, want 6 (3+3)", callCount)
+	}
+}
+
+func TestWidgetCache_RangeShiftCreatesBoundaries(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		return w
+	}}
+
+	// Initial range [0, 3).
+	wc.update(0, 3, builder, -1, -1)
+
+	// Shift range to [5, 8).
+	wc.update(5, 8, builder, -1, -1)
+
+	if len(wc.boundaries) != 3 {
+		t.Fatalf("len(boundaries) = %d, want 3", len(wc.boundaries))
+	}
+	for i := 0; i < 3; i++ {
+		rb := wc.boundaryAt(i)
+		if rb == nil {
+			t.Errorf("boundary[%d] nil after range shift", i)
+		}
+	}
+}
+
+// --- markItemDirty tests (ADR-007 Task 1f) ---
+
+func TestMarkItemDirty_InRange(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		w.SetEnabled(true)
+		return w
+	}}
+
+	wc.update(0, 5, builder, -1, -1)
+
+	// Create a ListView with this cache.
+	lv := &Widget{
+		hoveredIndex: noHoveredIndex,
+	}
+	lv.SetVisible(true)
+	lv.SetEnabled(true)
+	lv.cache = wc
+
+	// Mark item 2 dirty.
+	lv.markItemDirty(2)
+
+	// The widget at index 2 should be marked dirty.
+	item := lv.cache.widgetAt(2)
+	if item == nil {
+		t.Fatal("item at index 2 should not be nil")
+	}
+	if base, ok := item.(interface{ NeedsRedraw() bool }); ok {
+		if !base.NeedsRedraw() {
+			t.Error("item at index 2 should need redraw")
+		}
+	}
+
+	// The boundary at index 2 should have its cache invalidated.
+	rb := lv.cache.boundaryAt(2)
+	if rb == nil {
+		t.Fatal("boundary at index 2 should not be nil")
+	}
+	if rb.CacheValid() {
+		t.Error("boundary cache should be invalidated")
+	}
+
+	// ListView itself should need redraw.
+	if !lv.NeedsRedraw() {
+		t.Error("ListView should be marked for redraw")
+	}
+}
+
+func TestMarkItemDirty_OutOfRange(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		return w
+	}}
+
+	wc.update(5, 10, builder, -1, -1)
+
+	lv := &Widget{
+		hoveredIndex: noHoveredIndex,
+	}
+	lv.SetVisible(true)
+	lv.cache = wc
+
+	// Index 2 is before the cached range [5, 10) — should not panic.
+	lv.markItemDirty(2)
+
+	// Index 15 is after the cached range — should not panic.
+	lv.markItemDirty(15)
+}
+
+func TestHoverChange_NoInvalidate(t *testing.T) {
+	var wc widgetCache
+	builder := cdk.FuncContent[ItemContext]{Fn: func(ctx ItemContext) widget.Widget {
+		w := &mockWidget{}
+		w.SetVisible(true)
+		w.SetEnabled(true)
+		return w
+	}}
+
+	wc.update(0, 5, builder, -1, -1)
+
+	lv := &Widget{
+		hoveredIndex: noHoveredIndex,
+	}
+	lv.SetVisible(true)
+	lv.SetEnabled(true)
+	lv.cache = wc
+
+	// Record initial cache valid state.
+	initialValid := lv.cache.valid
+
+	// Simulate hover change via the same logic as handleContentMouseMove.
+	old := lv.hoveredIndex
+	lv.hoveredIndex = 2
+	if old >= 0 {
+		lv.markItemDirty(old)
+	}
+	if lv.hoveredIndex >= 0 {
+		lv.markItemDirty(lv.hoveredIndex)
+	}
+
+	// The widget cache should NOT be invalidated (no cache.invalidate() call).
+	if lv.cache.valid != initialValid {
+		t.Error("hover change should NOT invalidate the widget cache")
+	}
+
+	// Only the affected items should be dirty, not all.
+	for i := 0; i < 5; i++ {
+		item := lv.cache.widgetAt(i)
+		if item == nil {
+			continue
+		}
+		base, ok := item.(interface{ NeedsRedraw() bool })
+		if !ok {
+			continue
+		}
+		if i == 2 {
+			if !base.NeedsRedraw() {
+				t.Errorf("item %d should be dirty (new hovered)", i)
+			}
+		} else {
+			// Other items should NOT be dirty (hover didn't touch them).
+			// Note: old hovered was -1, so only new hovered (2) is dirty.
+			if base.NeedsRedraw() {
+				t.Errorf("item %d should NOT be dirty (only hover target changes)", i)
+			}
+		}
+	}
+}
 
 // --- SelectionMode tests ---
 

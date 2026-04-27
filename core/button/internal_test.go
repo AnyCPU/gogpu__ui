@@ -1,6 +1,7 @@
 package button
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -1117,6 +1118,7 @@ type internalDrawTextCall struct {
 
 func (c *internalMockCanvas) Clear(_ widget.Color)                                  {}
 func (c *internalMockCanvas) DrawRect(_ geometry.Rect, _ widget.Color)              {}
+func (c *internalMockCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color)        {}
 func (c *internalMockCanvas) StrokeRect(_ geometry.Rect, _ widget.Color, _ float32) {}
 
 func (c *internalMockCanvas) DrawRoundRect(r geometry.Rect, color widget.Color, radius float32) {
@@ -1129,7 +1131,9 @@ func (c *internalMockCanvas) StrokeRoundRect(r geometry.Rect, color widget.Color
 
 func (c *internalMockCanvas) DrawCircle(_ geometry.Point, _ float32, _ widget.Color)              {}
 func (c *internalMockCanvas) StrokeCircle(_ geometry.Point, _ float32, _ widget.Color, _ float32) {}
-func (c *internalMockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32)             {}
+func (c *internalMockCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
+}
+func (c *internalMockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32) {}
 
 func (c *internalMockCanvas) DrawText(text string, bounds geometry.Rect, fontSize float32, color widget.Color, bold bool, align widget.TextAlign) {
 	c.drawTexts = append(c.drawTexts, internalDrawTextCall{text: text, bounds: bounds, fontSize: fontSize, color: color, bold: bold, align: align})
@@ -1146,6 +1150,8 @@ func (c *internalMockCanvas) PopClip()                                     {}
 func (c *internalMockCanvas) PushTransform(_ geometry.Point)               {}
 func (c *internalMockCanvas) PopTransform()                                {}
 func (c *internalMockCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (c *internalMockCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (c *internalMockCanvas) ReplayScene(_ *scene.Scene)                   {}
 
 // --- ReadonlySignal Tests ---
 
@@ -1217,4 +1223,163 @@ func TestConfig_ResolvedText_ReadonlySignalPriority(t *testing.T) {
 			t.Errorf("ResolvedText() = %q, want %q", got, "signal")
 		}
 	})
+}
+
+// --- Granular Invalidation Tests (TASK-UI-INVAL-001a) ---
+//
+// These tests verify that hover/press/release use granular invalidation
+// (SetNeedsRedraw + InvalidateRect) instead of full-tree ctx.Invalidate().
+// Full invalidation triggers needsLayout + MarkRedrawInTree(root) which
+// invalidates ALL RepaintBoundary caches — massively overkill for visual-only
+// state changes like hover.
+
+func TestGranularInvalidation_HoverEnter_NoFullInvalidate(t *testing.T) {
+	w := New(TextOpt("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+	ctx := widget.NewContext()
+
+	enterEvt := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, enterEvt)
+
+	if ctx.IsInvalidated() {
+		t.Error("MouseEnter should NOT trigger full invalidation (ctx.Invalidate)")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MouseEnter should set needsRedraw on widget")
+	}
+	if ctx.InvalidatedRect().IsEmpty() {
+		t.Error("MouseEnter should trigger InvalidateRect with widget bounds")
+	}
+}
+
+func TestGranularInvalidation_HoverLeave_NoFullInvalidate(t *testing.T) {
+	w := New(TextOpt("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+	ctx := widget.NewContext()
+
+	// Enter first to set hover state.
+	enterEvt := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, enterEvt)
+
+	// Reset context to test leave independently.
+	ctx = widget.NewContext()
+	w.ClearRedraw()
+
+	leaveEvt := event.NewMouseEvent(event.MouseLeave, event.ButtonNone, 0,
+		geometry.Pt(150, 20), geometry.Pt(150, 20), event.ModNone)
+	handleEvent(w, ctx, leaveEvt)
+
+	if ctx.IsInvalidated() {
+		t.Error("MouseLeave should NOT trigger full invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MouseLeave should set needsRedraw on widget")
+	}
+	if ctx.InvalidatedRect().IsEmpty() {
+		t.Error("MouseLeave should trigger InvalidateRect")
+	}
+}
+
+func TestGranularInvalidation_Press_NoFullInvalidate(t *testing.T) {
+	w := New(TextOpt("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+	ctx := widget.NewContext()
+
+	pressEvt := event.NewMouseEvent(event.MousePress, event.ButtonLeft, event.ButtonStateLeft,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, pressEvt)
+
+	if ctx.IsInvalidated() {
+		t.Error("MousePress should NOT trigger full invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MousePress should set needsRedraw on widget")
+	}
+	if w.state != statePressed {
+		t.Errorf("state = %v, want statePressed", w.state)
+	}
+}
+
+func TestGranularInvalidation_Release_NoFullInvalidate(t *testing.T) {
+	clicked := false
+	w := New(TextOpt("Test"), OnClick(func() { clicked = true }))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+	ctx := widget.NewContext()
+
+	// Press first.
+	pressEvt := event.NewMouseEvent(event.MousePress, event.ButtonLeft, event.ButtonStateLeft,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, pressEvt)
+
+	// Reset context.
+	ctx = widget.NewContext()
+	w.ClearRedraw()
+
+	releaseEvt := event.NewMouseEvent(event.MouseRelease, event.ButtonLeft, 0,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, releaseEvt)
+
+	if ctx.IsInvalidated() {
+		t.Error("MouseRelease should NOT trigger full invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MouseRelease should set needsRedraw on widget")
+	}
+	if !clicked {
+		t.Error("onClick should still fire on release inside bounds")
+	}
+	if w.state != stateHover {
+		t.Errorf("state = %v, want stateHover (released inside)", w.state)
+	}
+}
+
+func TestGranularInvalidation_InvalidateRect_MatchesBounds(t *testing.T) {
+	w := New(TextOpt("Test"))
+	bounds := geometry.NewRect(10, 20, 110, 60)
+	w.SetBounds(bounds)
+	ctx := widget.NewContext()
+
+	enterEvt := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(50, 40), geometry.Pt(50, 40), event.ModNone)
+	handleEvent(w, ctx, enterEvt)
+
+	got := ctx.InvalidatedRect()
+	if got != bounds {
+		t.Errorf("InvalidatedRect = %v, want %v (widget bounds)", got, bounds)
+	}
+}
+
+func TestGranularInvalidation_ReleaseOutside_StillGranular(t *testing.T) {
+	clicked := false
+	w := New(TextOpt("Test"), OnClick(func() { clicked = true }))
+	w.SetBounds(geometry.NewRect(0, 0, 100, 40))
+	ctx := widget.NewContext()
+
+	// Press inside.
+	pressEvt := event.NewMouseEvent(event.MousePress, event.ButtonLeft, event.ButtonStateLeft,
+		geometry.Pt(50, 20), geometry.Pt(50, 20), event.ModNone)
+	handleEvent(w, ctx, pressEvt)
+
+	// Reset and release outside.
+	ctx = widget.NewContext()
+	w.ClearRedraw()
+
+	releaseEvt := event.NewMouseEvent(event.MouseRelease, event.ButtonLeft, 0,
+		geometry.Pt(200, 200), geometry.Pt(200, 200), event.ModNone)
+	handleEvent(w, ctx, releaseEvt)
+
+	if ctx.IsInvalidated() {
+		t.Error("MouseRelease outside should NOT trigger full invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MouseRelease outside should still set needsRedraw (state changed)")
+	}
+	if clicked {
+		t.Error("onClick should NOT fire on release outside bounds")
+	}
+	if w.state != stateNormal {
+		t.Errorf("state = %v, want stateNormal", w.state)
+	}
 }

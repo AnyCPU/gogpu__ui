@@ -4,6 +4,7 @@ import (
 	"image"
 	"testing"
 
+	"github.com/gogpu/gg/scene"
 	"github.com/gogpu/ui/a11y"
 	"github.com/gogpu/ui/event"
 	"github.com/gogpu/ui/geometry"
@@ -37,10 +38,13 @@ func (w *drawCountingWidget) Event(_ widget.Context, _ event.Event) bool { retur
 
 var _ widget.Widget = (*drawCountingWidget)(nil)
 
-// imageRecordingCanvas records DrawImage calls for validation.
+// imageRecordingCanvas records DrawImage and ReplayScene calls for validation.
+// ADR-007: RepaintBoundary now uses ReplayScene instead of DrawImage, so both
+// are tracked. replaySceneCalls is the primary assertion target.
 type imageRecordingCanvas struct {
 	mockCanvas
-	drawImageCalls []drawImageCall
+	drawImageCalls   []drawImageCall
+	replaySceneCalls []*scene.Scene
 }
 
 type drawImageCall struct {
@@ -50,6 +54,10 @@ type drawImageCall struct {
 
 func (c *imageRecordingCanvas) DrawImage(img image.Image, at geometry.Point) {
 	c.drawImageCalls = append(c.drawImageCalls, drawImageCall{img: img, at: at})
+}
+
+func (c *imageRecordingCanvas) ReplayScene(s *scene.Scene) {
+	c.replaySceneCalls = append(c.replaySceneCalls, s)
 }
 
 // --- Construction Tests ---
@@ -171,7 +179,7 @@ func TestRepaintBoundary_Draw_Invisible(t *testing.T) {
 	if child.drawCount > 0 {
 		t.Error("invisible boundary should not draw child")
 	}
-	if len(canvas.drawImageCalls) > 0 {
+	if len(canvas.replaySceneCalls) > 0 {
 		t.Error("invisible boundary should not call DrawImage")
 	}
 }
@@ -181,7 +189,7 @@ func TestRepaintBoundary_Draw_NilChild(t *testing.T) {
 	canvas := &imageRecordingCanvas{}
 	rb.Draw(nil, canvas)
 
-	if len(canvas.drawImageCalls) > 0 {
+	if len(canvas.replaySceneCalls) > 0 {
 		t.Error("nil child should not call DrawImage")
 	}
 }
@@ -198,8 +206,8 @@ func TestRepaintBoundary_Draw_FirstDrawRendersChild(t *testing.T) {
 	if child.drawCount != 1 {
 		t.Errorf("expected child Draw called once, got %d", child.drawCount)
 	}
-	if len(canvas.drawImageCalls) != 1 {
-		t.Fatalf("expected 1 DrawImage call, got %d", len(canvas.drawImageCalls))
+	if len(canvas.replaySceneCalls) != 1 {
+		t.Fatalf("expected 1 ReplayScene call, got %d", len(canvas.replaySceneCalls))
 	}
 	if rb.CacheHits() != 0 {
 		t.Error("first draw should not be a cache hit")
@@ -227,8 +235,8 @@ func TestRepaintBoundary_Draw_SecondDrawUsesCacheWhenClean(t *testing.T) {
 	if child.drawCount != 1 {
 		t.Errorf("expected child Draw called once total, got %d", child.drawCount)
 	}
-	if len(canvas2.drawImageCalls) != 1 {
-		t.Fatalf("expected 1 DrawImage call on second draw, got %d", len(canvas2.drawImageCalls))
+	if len(canvas2.replaySceneCalls) != 1 {
+		t.Fatalf("expected 1 ReplayScene call on second draw, got %d", len(canvas2.replaySceneCalls))
 	}
 	if rb.CacheHits() != 1 {
 		t.Errorf("expected 1 cache hit, got %d", rb.CacheHits())
@@ -244,11 +252,11 @@ func TestRepaintBoundary_Draw_DirtyChildInvalidatesCache(t *testing.T) {
 	canvas := &imageRecordingCanvas{}
 	rb.Draw(nil, canvas) // First draw
 
-	// Mark child dirty.
-	child.SetNeedsRedraw(true)
+	// Mark boundary dirty (simulates upward propagation from child).
+	rb.MarkBoundaryDirty()
 
 	canvas2 := &imageRecordingCanvas{}
-	rb.Draw(nil, canvas2) // Second draw: child dirty, must re-render.
+	rb.Draw(nil, canvas2) // Second draw: dirty → re-record.
 
 	if child.drawCount != 2 {
 		t.Errorf("expected child Draw called twice, got %d", child.drawCount)
@@ -295,12 +303,14 @@ func TestRepaintBoundary_Draw_ZeroSizeSkipsRendering(t *testing.T) {
 	if child.drawCount > 0 {
 		t.Error("zero-size boundary should not draw child")
 	}
-	if len(canvas.drawImageCalls) > 0 {
+	if len(canvas.replaySceneCalls) > 0 {
 		t.Error("zero-size boundary should not call DrawImage")
 	}
 }
 
-func TestRepaintBoundary_Draw_PositionPassedToDrawImage(t *testing.T) {
+func TestRepaintBoundary_Draw_ReplaySceneCalledOnDraw(t *testing.T) {
+	// ReplayScene should be called regardless of widget position.
+	// Position is embedded in the scene commands, not passed as a parameter.
 	child := newDrawCountingWidget()
 	rb := primitives.NewRepaintBoundary(child)
 
@@ -310,13 +320,11 @@ func TestRepaintBoundary_Draw_PositionPassedToDrawImage(t *testing.T) {
 	canvas := &imageRecordingCanvas{}
 	rb.Draw(nil, canvas)
 
-	if len(canvas.drawImageCalls) != 1 {
-		t.Fatalf("expected 1 DrawImage call, got %d", len(canvas.drawImageCalls))
+	if len(canvas.replaySceneCalls) != 1 {
+		t.Fatalf("expected 1 ReplayScene call, got %d", len(canvas.replaySceneCalls))
 	}
-
-	at := canvas.drawImageCalls[0].at
-	if at.X != 50 || at.Y != 30 {
-		t.Errorf("expected DrawImage at (50,30), got (%v,%v)", at.X, at.Y)
+	if canvas.replaySceneCalls[0] == nil {
+		t.Error("ReplayScene received nil scene")
 	}
 }
 
@@ -485,6 +493,201 @@ func TestRepaintBoundary_Accessibility(t *testing.T) {
 	}
 }
 
+// --- DrawStats Integration Tests ---
+
+func TestRepaintBoundary_Draw_CacheHitIncrementsDrawStats(t *testing.T) {
+	// When RepaintBoundary serves from cache, it should increment
+	// DrawStats.CachedWidgets via the DrawStatsProvider interface.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	ctx := widget.NewContext()
+	var stats widget.DrawStats
+	ctx.SetDrawStats(&stats)
+
+	canvas := &imageRecordingCanvas{}
+
+	// First draw: cache miss → child rendered.
+	rb.Draw(ctx, canvas)
+	if stats.CachedWidgets != 0 {
+		t.Errorf("CachedWidgets = %d after first draw, want 0 (cache miss)", stats.CachedWidgets)
+	}
+
+	// Second draw: child is clean → cache hit.
+	canvas2 := &imageRecordingCanvas{}
+	rb.Draw(ctx, canvas2)
+	if stats.CachedWidgets != 1 {
+		t.Errorf("CachedWidgets = %d after second draw, want 1 (cache hit)", stats.CachedWidgets)
+	}
+
+	// Third draw: still clean → another cache hit.
+	canvas3 := &imageRecordingCanvas{}
+	rb.Draw(ctx, canvas3)
+	if stats.CachedWidgets != 2 {
+		t.Errorf("CachedWidgets = %d after third draw, want 2", stats.CachedWidgets)
+	}
+
+	ctx.SetDrawStats(nil)
+}
+
+func TestRepaintBoundary_Draw_DirtySubtreeDoesNotIncrementCachedWidgets(t *testing.T) {
+	// When the boundary is dirty, RepaintBoundary re-records the scene
+	// and should NOT increment CachedWidgets.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	ctx := widget.NewContext()
+	var stats widget.DrawStats
+	ctx.SetDrawStats(&stats)
+
+	canvas := &imageRecordingCanvas{}
+	rb.Draw(ctx, canvas) // First draw (cache miss).
+
+	// Mark boundary dirty (simulates upward propagation from child).
+	rb.MarkBoundaryDirty()
+
+	canvas2 := &imageRecordingCanvas{}
+	rb.Draw(ctx, canvas2) // Second draw: dirty → re-record, not cache hit.
+
+	if stats.CachedWidgets != 0 {
+		t.Errorf("CachedWidgets = %d, want 0 (dirty boundary should not count as cache hit)",
+			stats.CachedWidgets)
+	}
+
+	ctx.SetDrawStats(nil)
+}
+
+func TestRepaintBoundary_Draw_NilDrawStatsDoesNotPanic(t *testing.T) {
+	// When context does not provide DrawStats (nil), cache hit should
+	// still work correctly (just no stats recorded).
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	canvas := &imageRecordingCanvas{}
+	rb.Draw(nil, canvas) // First draw: nil ctx.
+	rb.Draw(nil, canvas) // Second draw: cache hit, nil ctx → no panic.
+
+	if rb.CacheHits() != 1 {
+		t.Errorf("CacheHits = %d, want 1 (cache hit should work without stats)", rb.CacheHits())
+	}
+}
+
+func TestRepaintBoundary_Draw_NonProviderContextDoesNotPanic(t *testing.T) {
+	// When context does not implement DrawStatsProvider, cache hit
+	// should still work (just no stats recorded). Uses a plain Context.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	// Use ContextImpl but without SetDrawStats → DrawStats() returns nil.
+	ctx := widget.NewContext()
+
+	canvas := &imageRecordingCanvas{}
+	rb.Draw(ctx, canvas) // First draw.
+	rb.Draw(ctx, canvas) // Second draw: cache hit.
+
+	if rb.CacheHits() != 1 {
+		t.Errorf("CacheHits = %d, want 1", rb.CacheHits())
+	}
+}
+
+func TestRepaintBoundary_DrawViaDrawTree_CachedWidgetsPopulated(t *testing.T) {
+	// When drawn through widget.DrawTree, the stats should include
+	// CachedWidgets from RepaintBoundary cache hits.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	ctx := widget.NewContext()
+	canvas := &imageRecordingCanvas{}
+
+	// First draw: cache miss.
+	stats1 := widget.DrawTree(rb, ctx, canvas)
+	if stats1.CachedWidgets != 0 {
+		t.Errorf("first DrawTree: CachedWidgets = %d, want 0", stats1.CachedWidgets)
+	}
+
+	// Second draw: cache hit → CachedWidgets should be 1.
+	canvas2 := &imageRecordingCanvas{}
+	stats2 := widget.DrawTree(rb, ctx, canvas2)
+	if stats2.CachedWidgets != 1 {
+		t.Errorf("second DrawTree: CachedWidgets = %d, want 1", stats2.CachedWidgets)
+	}
+}
+
+// --- ADR-007 Boundary Dirty Flag Tests ---
+
+func TestRepaintBoundary_Draw_MultipleBoundaries_OneDirty(t *testing.T) {
+	// End-to-end test: 12 boundaries, only 1 marked dirty.
+	// Only the dirty boundary should re-record; the rest serve cached scenes.
+	const numBoundaries = 12
+	children := make([]*drawCountingWidget, numBoundaries)
+	boundaries := make([]*primitives.RepaintBoundary, numBoundaries)
+
+	for i := range numBoundaries {
+		children[i] = newDrawCountingWidget()
+		boundaries[i] = primitives.NewRepaintBoundary(children[i])
+		boundaries[i].Layout(nil, geometry.BoxConstraints(0, 200, 0, 50))
+	}
+
+	// First draw: all boundaries render their children.
+	for i := range numBoundaries {
+		canvas := &imageRecordingCanvas{}
+		boundaries[i].Draw(nil, canvas)
+	}
+
+	// Verify all caches are valid and all children drawn exactly once.
+	for i := range numBoundaries {
+		if !boundaries[i].CacheValid() {
+			t.Fatalf("boundary[%d] cache not valid after first draw", i)
+		}
+		if children[i].drawCount != 1 {
+			t.Fatalf("children[%d] drawn %d times, want 1", i, children[i].drawCount)
+		}
+	}
+
+	// Mark only boundary[3] dirty via MarkBoundaryDirty (upward propagation).
+	boundaries[3].MarkBoundaryDirty()
+
+	ctx := widget.NewContext()
+	var stats widget.DrawStats
+	ctx.SetDrawStats(&stats)
+
+	// Second draw: all boundaries.
+	for i := range numBoundaries {
+		canvas := &imageRecordingCanvas{}
+		boundaries[i].Draw(ctx, canvas)
+	}
+
+	// Verify: only child[3] was re-rendered.
+	for i := range numBoundaries {
+		if i == 3 {
+			if children[i].drawCount != 2 {
+				t.Errorf("children[%d] drawn %d times, want 2 (dirty boundary)", i, children[i].drawCount)
+			}
+		} else {
+			if children[i].drawCount != 1 {
+				t.Errorf("children[%d] drawn %d times, want 1 (clean boundary)", i, children[i].drawCount)
+			}
+		}
+	}
+
+	// CachedWidgets should be numBoundaries - 1 (all except the dirty one).
+	if stats.CachedWidgets != numBoundaries-1 {
+		t.Errorf("CachedWidgets = %d, want %d", stats.CachedWidgets, numBoundaries-1)
+	}
+
+	ctx.SetDrawStats(nil)
+}
+
 // --- Helper test widgets ---
 
 type eventTestWidget struct {
@@ -529,3 +732,190 @@ func (w *mouseTrackingWidget) Event(_ widget.Context, e event.Event) bool {
 }
 
 var _ widget.Widget = (*mouseTrackingWidget)(nil)
+
+// --- GPU Texture Compositing Tests ---
+
+func TestRepaintBoundary_Draw_SceneRecordAndReplay(t *testing.T) {
+	// Verify that the scene-based cache records on miss and replays on hit.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	canvas := &imageRecordingCanvas{}
+	rb.Draw(nil, canvas)
+
+	if child.drawCount != 1 {
+		t.Errorf("child drawn %d times, want 1", child.drawCount)
+	}
+	if len(canvas.replaySceneCalls) != 1 {
+		t.Errorf("ReplayScene called %d times, want 1", len(canvas.replaySceneCalls))
+	}
+	if !rb.CacheValid() {
+		t.Error("cache should be valid after scene recording")
+	}
+}
+
+func TestRepaintBoundary_Draw_SceneCacheHitWorks(t *testing.T) {
+	// Cache hit should replay the same scene without re-drawing child.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	canvas := &imageRecordingCanvas{}
+	rb.Draw(nil, canvas) // Cache miss.
+
+	canvas2 := &imageRecordingCanvas{}
+	rb.Draw(nil, canvas2) // Cache hit.
+
+	if child.drawCount != 1 {
+		t.Errorf("child drawn %d times, want 1 (cache hit)", child.drawCount)
+	}
+	if len(canvas2.replaySceneCalls) != 1 {
+		t.Errorf("ReplayScene called %d times, want 1 (cache hit)", len(canvas2.replaySceneCalls))
+	}
+	if rb.CacheHits() != 1 {
+		t.Errorf("CacheHits = %d, want 1", rb.CacheHits())
+	}
+}
+
+func TestRepaintBoundary_Unmount_ClearsSceneCache(t *testing.T) {
+	// Unmount should clear all scene cache state.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+
+	canvas := &imageRecordingCanvas{}
+	rb.Draw(nil, canvas) // Populate cache.
+
+	if !rb.CacheValid() {
+		t.Fatal("cache should be valid before Unmount")
+	}
+
+	rb.Unmount()
+
+	if rb.CacheValid() {
+		t.Error("cache should be invalid after Unmount")
+	}
+	if rb.CacheHits() != 0 {
+		t.Error("cache hits should be 0 after Unmount")
+	}
+}
+
+func TestRepaintBoundary_Layout_SizeChange_InvalidatesSceneCache(t *testing.T) {
+	// When size changes, the scene cache should be invalidated.
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	// First layout + draw.
+	rb.Layout(nil, geometry.BoxConstraints(0, 200, 0, 100))
+	canvas := &imageRecordingCanvas{}
+	rb.Draw(nil, canvas)
+	if !rb.CacheValid() {
+		t.Fatal("cache should be valid after first draw")
+	}
+
+	// Layout with different size.
+	rb.Layout(nil, geometry.Tight(geometry.Sz(50, 25)))
+	if rb.CacheValid() {
+		t.Error("cache should be invalidated after size change")
+	}
+
+	// Draw after size change should re-record.
+	canvas2 := &imageRecordingCanvas{}
+	rb.Draw(nil, canvas2)
+	if child.drawCount != 2 {
+		t.Errorf("child drawn %d times, want 2 (re-record after size change)", child.drawCount)
+	}
+}
+
+// --- MarkBoundaryDirty Tests (ADR-007 Task 1d) ---
+
+func TestRepaintBoundary_MarkBoundaryDirty(t *testing.T) {
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	if rb.IsBoundaryDirty() {
+		t.Error("new RepaintBoundary should not be dirty")
+	}
+
+	rb.MarkBoundaryDirty()
+
+	if !rb.IsBoundaryDirty() {
+		t.Error("should be dirty after MarkBoundaryDirty")
+	}
+	if rb.CacheValid() {
+		t.Error("cache should be invalidated after MarkBoundaryDirty")
+	}
+}
+
+func TestRepaintBoundary_MarkBoundaryDirty_O1Guard(t *testing.T) {
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	callCount := 0
+	rb.SetOnBoundaryDirty(func(_ *primitives.RepaintBoundary) {
+		callCount++
+	})
+
+	rb.MarkBoundaryDirty()
+	rb.MarkBoundaryDirty() // Second call — should be O(1) no-op.
+
+	if callCount != 1 {
+		t.Errorf("onBoundaryDirty should be called once (O(1) guard), got %d", callCount)
+	}
+}
+
+func TestRepaintBoundary_ClearBoundaryDirty(t *testing.T) {
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	rb.MarkBoundaryDirty()
+	rb.ClearBoundaryDirty()
+
+	if rb.IsBoundaryDirty() {
+		t.Error("should not be dirty after ClearBoundaryDirty")
+	}
+}
+
+func TestRepaintBoundary_OnBoundaryDirtyCallback(t *testing.T) {
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	var notifiedRB *primitives.RepaintBoundary
+	rb.SetOnBoundaryDirty(func(r *primitives.RepaintBoundary) {
+		notifiedRB = r
+	})
+
+	rb.MarkBoundaryDirty()
+
+	if notifiedRB != rb {
+		t.Error("callback should receive the RepaintBoundary that was marked dirty")
+	}
+}
+
+func TestRepaintBoundary_MarkClearRemark(t *testing.T) {
+	child := newDrawCountingWidget()
+	rb := primitives.NewRepaintBoundary(child)
+
+	callCount := 0
+	rb.SetOnBoundaryDirty(func(_ *primitives.RepaintBoundary) {
+		callCount++
+	})
+
+	rb.MarkBoundaryDirty()
+	rb.ClearBoundaryDirty()
+	rb.MarkBoundaryDirty() // Should fire callback again after clear.
+
+	if callCount != 2 {
+		t.Errorf("callback should fire on each clean→dirty transition, got %d", callCount)
+	}
+}
+
+// TestRepaintBoundary_ImplementsRepaintBoundaryMarker verifies the compile-time
+// interface check for widget.RepaintBoundaryMarker.
+func TestRepaintBoundary_ImplementsRepaintBoundaryMarker(t *testing.T) {
+	var rb interface{} = &primitives.RepaintBoundary{}
+	if _, ok := rb.(widget.RepaintBoundaryMarker); !ok {
+		t.Error("RepaintBoundary should implement widget.RepaintBoundaryMarker")
+	}
+}

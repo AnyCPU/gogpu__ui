@@ -29,9 +29,10 @@ func handleContentMouseEvent(lv *Widget, ctx widget.Context, e *event.MouseEvent
 		return handleContentMousePress(lv, ctx, e)
 	case event.MouseLeave:
 		if lv.hoveredIndex != noHoveredIndex {
+			old := lv.hoveredIndex
 			lv.hoveredIndex = noHoveredIndex
-			lv.cache.invalidate()
-			ctx.Invalidate()
+			lv.markItemDirty(old)
+			ctx.InvalidateRect(lv.Bounds())
 		}
 		return false
 	default:
@@ -53,9 +54,15 @@ func handleContentMouseMove(lv *Widget, ctx widget.Context, e *event.MouseEvent)
 	}
 
 	if idx != lv.hoveredIndex {
+		old := lv.hoveredIndex
 		lv.hoveredIndex = idx
-		lv.cache.invalidate()
-		ctx.Invalidate()
+		if old >= 0 {
+			lv.markItemDirty(old)
+		}
+		if idx >= 0 {
+			lv.markItemDirty(idx)
+		}
+		ctx.InvalidateRect(lv.Bounds())
 	}
 	return false // Don't consume move events.
 }

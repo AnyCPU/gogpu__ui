@@ -1,6 +1,7 @@
 package linechart
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -719,6 +720,7 @@ type recordingCanvas struct {
 
 func (c *recordingCanvas) Clear(_ widget.Color)                                     {}
 func (c *recordingCanvas) DrawRect(_ geometry.Rect, _ widget.Color)                 { c.drawCount++; c.rectCount++ }
+func (c *recordingCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color)           {}
 func (c *recordingCanvas) StrokeRect(_ geometry.Rect, _ widget.Color, _ float32)    { c.drawCount++ }
 func (c *recordingCanvas) DrawRoundRect(_ geometry.Rect, _ widget.Color, _ float32) { c.drawCount++ }
 func (c *recordingCanvas) StrokeRoundRect(_ geometry.Rect, _ widget.Color, _ float32, _ float32) {
@@ -727,6 +729,8 @@ func (c *recordingCanvas) StrokeRoundRect(_ geometry.Rect, _ widget.Color, _ flo
 func (c *recordingCanvas) DrawCircle(_ geometry.Point, _ float32, _ widget.Color) { c.drawCount++ }
 func (c *recordingCanvas) StrokeCircle(_ geometry.Point, _ float32, _ widget.Color, _ float32) {
 	c.drawCount++
+}
+func (c *recordingCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
 }
 func (c *recordingCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32) {
 	c.drawCount++
@@ -749,6 +753,8 @@ func (c *recordingCanvas) PopClip()                        { c.clipCount++ }
 func (c *recordingCanvas) PushTransform(_ geometry.Point)  {}
 func (c *recordingCanvas) PopTransform()                   {}
 func (c *recordingCanvas) TransformOffset() geometry.Point { return geometry.Point{} }
+func (c *recordingCanvas) ClipBounds() geometry.Rect       { return geometry.NewRect(0, 0, 10000, 10000) }
+func (c *recordingCanvas) ReplayScene(_ *scene.Scene)      {}
 
 type mockPainter struct {
 	called bool

@@ -1,6 +1,7 @@
 package radio
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 
@@ -1430,6 +1431,7 @@ type internalDrawRoundRectCall struct {
 
 func (c *internalMockCanvas) Clear(_ widget.Color)                                  {}
 func (c *internalMockCanvas) DrawRect(_ geometry.Rect, _ widget.Color)              {}
+func (c *internalMockCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color)        {}
 func (c *internalMockCanvas) StrokeRect(_ geometry.Rect, _ widget.Color, _ float32) {}
 
 func (c *internalMockCanvas) DrawRoundRect(r geometry.Rect, color widget.Color, radius float32) {
@@ -1445,6 +1447,8 @@ func (c *internalMockCanvas) DrawCircle(center geometry.Point, radius float32, c
 
 func (c *internalMockCanvas) StrokeCircle(center geometry.Point, radius float32, color widget.Color, strokeWidth float32) {
 	c.strokeCircles = append(c.strokeCircles, internalStrokeCircleCall{center: center, radius: radius, color: color, strokeWidth: strokeWidth})
+}
+func (c *internalMockCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
 }
 
 func (c *internalMockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32) {}
@@ -1464,6 +1468,8 @@ func (c *internalMockCanvas) PopClip()                                     {}
 func (c *internalMockCanvas) PushTransform(_ geometry.Point)               {}
 func (c *internalMockCanvas) PopTransform()                                {}
 func (c *internalMockCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (c *internalMockCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (c *internalMockCanvas) ReplayScene(_ *scene.Scene)                   {}
 
 // --- onChange dedup test ---
 
@@ -1772,5 +1778,101 @@ func TestGroupConfig_ResolvedDisabled_ReadonlySignal(t *testing.T) {
 
 	if !c.ResolvedDisabled() {
 		t.Error("ResolvedDisabled() should be true (readonly computed signal overrides all)")
+	}
+}
+
+// --- Granular Invalidation Tests (TASK-UI-INVAL-001c) ---
+
+func TestGranularInvalidation_Radio_HoverEnter(t *testing.T) {
+	g := NewGroup(Items(ItemDef{Value: "a", Label: "Alpha"}, ItemDef{Value: "b", Label: "Beta"}))
+	it := g.items[0]
+	it.SetBounds(geometry.NewRect(0, 0, 200, 30))
+	ctx := widget.NewContext()
+
+	e := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(100, 15), geometry.Pt(100, 15), event.ModNone)
+	handleItemEvent(it, ctx, e)
+
+	if ctx.IsInvalidated() {
+		t.Error("radio hover enter should use granular invalidation, not ctx.Invalidate()")
+	}
+	if !it.NeedsRedraw() {
+		t.Error("radio hover enter should set needsRedraw on item")
+	}
+}
+
+func TestGranularInvalidation_Radio_HoverLeave(t *testing.T) {
+	g := NewGroup(Items(ItemDef{Value: "a", Label: "Alpha"}))
+	it := g.items[0]
+	it.SetBounds(geometry.NewRect(0, 0, 200, 30))
+	ctx := widget.NewContext()
+
+	e := event.NewMouseEvent(event.MouseLeave, event.ButtonNone, 0,
+		geometry.Pt(300, 15), geometry.Pt(300, 15), event.ModNone)
+	handleItemEvent(it, ctx, e)
+
+	if ctx.IsInvalidated() {
+		t.Error("radio hover leave should use granular invalidation")
+	}
+	if !it.NeedsRedraw() {
+		t.Error("radio hover leave should set needsRedraw")
+	}
+}
+
+func TestGranularInvalidation_Radio_PressRelease(t *testing.T) {
+	selected := ""
+	g := NewGroup(
+		Items(ItemDef{Value: "a", Label: "Alpha"}, ItemDef{Value: "b", Label: "Beta"}),
+		OnChange(func(v string) { selected = v }),
+	)
+	it := g.items[0]
+	it.SetBounds(geometry.NewRect(0, 0, 200, 30))
+
+	// Press.
+	ctx := widget.NewContext()
+	press := event.NewMouseEvent(event.MousePress, event.ButtonLeft, event.ButtonStateLeft,
+		geometry.Pt(100, 15), geometry.Pt(100, 15), event.ModNone)
+	handleItemEvent(it, ctx, press)
+
+	if ctx.IsInvalidated() {
+		t.Error("radio press should use granular invalidation")
+	}
+
+	// Release inside.
+	ctx = widget.NewContext()
+	release := event.NewMouseEvent(event.MouseRelease, event.ButtonLeft, 0,
+		geometry.Pt(100, 15), geometry.Pt(100, 15), event.ModNone)
+	handleItemEvent(it, ctx, release)
+
+	if ctx.IsInvalidated() {
+		t.Error("radio release should use granular invalidation")
+	}
+	if selected != "a" {
+		t.Errorf("selected = %q, want %q (selectValue should still fire)", selected, "a")
+	}
+}
+
+func TestGranularInvalidation_Radio_KeyActivation(t *testing.T) {
+	g := NewGroup(Items(ItemDef{Value: "a", Label: "Alpha"}))
+	it := g.items[0]
+	it.SetBounds(geometry.NewRect(0, 0, 200, 30))
+	it.SetFocused(true)
+
+	// Key press.
+	ctx := widget.NewContext()
+	press := &event.KeyEvent{KeyType: event.KeyPress, Key: event.KeySpace}
+	handleItemEvent(it, ctx, press)
+
+	if ctx.IsInvalidated() {
+		t.Error("radio key press should use granular invalidation")
+	}
+
+	// Key release.
+	ctx = widget.NewContext()
+	release := &event.KeyEvent{KeyType: event.KeyRelease, Key: event.KeySpace}
+	handleItemEvent(it, ctx, release)
+
+	if ctx.IsInvalidated() {
+		t.Error("radio key release should use granular invalidation")
 	}
 }

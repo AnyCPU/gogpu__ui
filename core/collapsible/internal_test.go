@@ -1,6 +1,7 @@
 package collapsible
 
 import (
+	"github.com/gogpu/gg/scene"
 	"image"
 	"testing"
 	"time"
@@ -659,8 +660,9 @@ type internalMockCanvas struct {
 	strokeRectCount int
 }
 
-func (c *internalMockCanvas) Clear(_ widget.Color)                     {}
-func (c *internalMockCanvas) DrawRect(_ geometry.Rect, _ widget.Color) { c.drawRectCount++ }
+func (c *internalMockCanvas) Clear(_ widget.Color)                           {}
+func (c *internalMockCanvas) DrawRect(_ geometry.Rect, _ widget.Color)       { c.drawRectCount++ }
+func (c *internalMockCanvas) FillRectDirect(_ geometry.Rect, _ widget.Color) {}
 func (c *internalMockCanvas) StrokeRect(_ geometry.Rect, _ widget.Color, _ float32) {
 	c.strokeRectCount++
 }
@@ -668,6 +670,8 @@ func (c *internalMockCanvas) DrawRoundRect(_ geometry.Rect, _ widget.Color, _ fl
 func (c *internalMockCanvas) StrokeRoundRect(_ geometry.Rect, _ widget.Color, _ float32, _ float32) {}
 func (c *internalMockCanvas) DrawCircle(_ geometry.Point, _ float32, _ widget.Color)                {}
 func (c *internalMockCanvas) StrokeCircle(_ geometry.Point, _ float32, _ widget.Color, _ float32)   {}
+func (c *internalMockCanvas) StrokeArc(_ geometry.Point, _ float32, _, _ float64, _ widget.Color, _ float32) {
+}
 func (c *internalMockCanvas) DrawLine(_, _ geometry.Point, _ widget.Color, _ float32) {
 	c.drawLineCount++
 }
@@ -687,3 +691,162 @@ func (c *internalMockCanvas) PopClip()                                     { c.p
 func (c *internalMockCanvas) PushTransform(_ geometry.Point)               {}
 func (c *internalMockCanvas) PopTransform()                                {}
 func (c *internalMockCanvas) TransformOffset() geometry.Point              { return geometry.Point{} }
+func (c *internalMockCanvas) ClipBounds() geometry.Rect                    { return geometry.NewRect(0, 0, 10000, 10000) }
+func (c *internalMockCanvas) ReplayScene(_ *scene.Scene)                   {}
+
+// --- Granular Invalidation Tests (TASK-UI-INVAL-001g) ---
+//
+// These tests verify that hover/press use granular invalidation
+// (SetNeedsRedraw + InvalidateRect) instead of full-tree ctx.Invalidate().
+// Toggle via release KEEPS full invalidation because it's a structural change
+// (content height changes, needs layout).
+
+func TestGranularInvalidation_HoverEnter_NoFullInvalidate(t *testing.T) {
+	w := New(Title("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 200, 36))
+	ctx := widget.NewContext()
+
+	enter := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(100, 18), geometry.Pt(100, 18), event.ModNone)
+	handleEvent(w, ctx, enter)
+
+	if ctx.IsInvalidated() {
+		t.Error("MouseEnter should NOT trigger full invalidation (ctx.Invalidate)")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MouseEnter should set needsRedraw on widget")
+	}
+	if ctx.InvalidatedRect().IsEmpty() {
+		t.Error("MouseEnter should trigger InvalidateRect with widget bounds")
+	}
+}
+
+func TestGranularInvalidation_HoverLeave_NoFullInvalidate(t *testing.T) {
+	w := New(Title("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 200, 36))
+
+	// Enter first to set hover state.
+	ctx := widget.NewContext()
+	enter := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(100, 18), geometry.Pt(100, 18), event.ModNone)
+	handleEvent(w, ctx, enter)
+
+	// Reset context and redraw flag.
+	ctx = widget.NewContext()
+	w.ClearRedraw()
+
+	leave := event.NewMouseEvent(event.MouseLeave, event.ButtonNone, 0,
+		geometry.Pt(250, 18), geometry.Pt(250, 18), event.ModNone)
+	handleEvent(w, ctx, leave)
+
+	if ctx.IsInvalidated() {
+		t.Error("MouseLeave should NOT trigger full invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MouseLeave should set needsRedraw on widget")
+	}
+	if ctx.InvalidatedRect().IsEmpty() {
+		t.Error("MouseLeave should trigger InvalidateRect")
+	}
+}
+
+func TestGranularInvalidation_Press_NoFullInvalidate(t *testing.T) {
+	w := New(Title("Test"))
+	w.SetBounds(geometry.NewRect(0, 0, 200, 36))
+	ctx := widget.NewContext()
+
+	press := event.NewMouseEvent(event.MousePress, event.ButtonLeft, event.ButtonStateLeft,
+		geometry.Pt(100, 18), geometry.Pt(100, 18), event.ModNone)
+	handleEvent(w, ctx, press)
+
+	if ctx.IsInvalidated() {
+		t.Error("MousePress should NOT trigger full invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("MousePress should set needsRedraw on widget")
+	}
+	if w.istate != statePressed {
+		t.Errorf("state = %v, want statePressed", w.istate)
+	}
+}
+
+func TestGranularInvalidation_Release_KeepsFullInvalidation(t *testing.T) {
+	w := New(Title("Test"), Animated(false))
+	w.SetBounds(geometry.NewRect(0, 0, 200, 36))
+	ctx := widget.NewContext()
+
+	// Press first.
+	press := event.NewMouseEvent(event.MousePress, event.ButtonLeft, event.ButtonStateLeft,
+		geometry.Pt(100, 18), geometry.Pt(100, 18), event.ModNone)
+	handleEvent(w, ctx, press)
+
+	// Reset context.
+	ctx = widget.NewContext()
+	w.ClearRedraw()
+
+	// Release inside header -- triggers Toggle() which is structural.
+	release := event.NewMouseEvent(event.MouseRelease, event.ButtonLeft, 0,
+		geometry.Pt(100, 18), geometry.Pt(100, 18), event.ModNone)
+	handleEvent(w, ctx, release)
+
+	if !ctx.IsInvalidated() {
+		t.Error("MouseRelease with Toggle MUST trigger full invalidation (structural change)")
+	}
+}
+
+func TestGranularInvalidation_KeyPress_NoFullInvalidate(t *testing.T) {
+	w := New(Title("Test"), Animated(false))
+	w.SetFocused(true)
+	ctx := widget.NewContext()
+
+	press := event.NewKeyEvent(event.KeyPress, event.KeySpace, 0, event.ModNone)
+	handleEvent(w, ctx, press)
+
+	if ctx.IsInvalidated() {
+		t.Error("Key press should NOT trigger full invalidation")
+	}
+	if !w.NeedsRedraw() {
+		t.Error("Key press should set needsRedraw on widget")
+	}
+	if w.istate != statePressed {
+		t.Errorf("state = %v, want statePressed", w.istate)
+	}
+}
+
+func TestGranularInvalidation_KeyRelease_KeepsFullInvalidation(t *testing.T) {
+	w := New(Title("Test"), Animated(false))
+	w.SetFocused(true)
+	ctx := widget.NewContext()
+
+	// Press first.
+	press := event.NewKeyEvent(event.KeyPress, event.KeySpace, 0, event.ModNone)
+	handleEvent(w, ctx, press)
+
+	// Reset context.
+	ctx = widget.NewContext()
+	w.ClearRedraw()
+
+	// Release triggers Toggle() -- structural change.
+	release := event.NewKeyEvent(event.KeyRelease, event.KeySpace, 0, event.ModNone)
+	handleEvent(w, ctx, release)
+
+	if !ctx.IsInvalidated() {
+		t.Error("Key release MUST trigger full invalidation (Toggle is structural)")
+	}
+}
+
+func TestGranularInvalidation_InvalidateRect_MatchesBounds(t *testing.T) {
+	bounds := geometry.NewRect(10, 20, 200, 56)
+	w := New(Title("Test"))
+	w.SetBounds(bounds)
+	ctx := widget.NewContext()
+
+	enter := event.NewMouseEvent(event.MouseEnter, event.ButtonNone, 0,
+		geometry.Pt(100, 38), geometry.Pt(100, 38), event.ModNone)
+	handleEvent(w, ctx, enter)
+
+	got := ctx.InvalidatedRect()
+	if got != bounds {
+		t.Errorf("InvalidatedRect = %v, want %v (widget bounds)", got, bounds)
+	}
+}
