@@ -92,7 +92,7 @@
 
 | Package | Purpose | Key Types |
 |---------|---------|-----------|
-| `widget/` | Core widget abstractions | `Widget`, `WidgetBase`, `Context`, `Canvas`, `Focusable`, `Lifecycle`, `SchedulerRef`, `ThemeProvider`, `Color` |
+| `widget/` | Core widget abstractions | `Widget`, `WidgetBase`, `Context`, `Canvas`, `Focusable`, `PointerCapturer` (ADR-031), `Lifecycle`, `SchedulerRef`, `ThemeProvider`, `Color` |
 | `event/` | Input event types | `MouseEvent`, `KeyEvent`, `FocusEvent`, `WheelEvent`, `Modifiers` |
 | `geometry/` | Geometric primitives | `Point`, `Size`, `Rect`, `Constraints`, `Insets` |
 
@@ -145,7 +145,7 @@
 | `overlay/` | Overlay/popup infrastructure | `Stack`, `Container`, `Position` |
 | `focus/` | Focus management (public API) | `Manager`, `Shortcut`, `DrawFocusRing` |
 | `layout/` | Layout tree and algorithms | `NodeID`, `NodeLayout`, `Result`, `Algorithm` |
-| `state/` | Reactive state with push-pull lifecycle | `Signal`, `ReadonlySignal`, `Computed`, `Effect`, `Binding`, `Scheduler` |
+| `state/` | Reactive state with push-pull lifecycle | `Signal`, `ReadonlySignal`, `Computed`, `Effect`, `Binding`, `BindToSchedulerFunc`, `Scheduler` |
 | `theme/` | Base theme system | `Theme`, `ColorPalette`, `Typography`, `SpacingScale`, `ShadowStyles`, `RadiusScale` |
 | `theme/font/` | Font registry (CSS weight matching, W3C spec) | `Registry`, `Family`, `Face`, `Weight`, `Style` |
 | `a11y/` | Accessibility | `Accessible`, `Node`, `NodeID`, `Role`, `State`, `Action`, `Tree` |
@@ -155,7 +155,7 @@
 | `i18n/` | Internationalization (CLDR plural rules, RTL) | `Locale`, `Bundle`, `Translator`, `LocaleSignal` |
 | `dnd/` | Drag and drop | `DragSource`, `DropTarget`, `Manager`, 5px threshold |
 | `uitest/` | Testing utilities (reusable mocks) | `MockCanvas`, `MockContext`, event factories, assertions |
-| `app/` | Window integration + FocusManager | `App`, `Window`, `EventBridge`, `FrameStats`, `FocusManager` |
+| `app/` | Window integration + FocusManager | `App`, `Window`, `EventBridge`, `FrameStats`, `FocusManager`, `PlatformProvider()` |
 | `registry/` | Widget registry | `Registry`, `Category`, widget/context/canvas type aliases |
 | `plugin/` | Plugin system | `Plugin`, `Manager`, `PluginContext`, `Dependency`, `AssetLoader` |
 | `render/` | Public Canvas factory | `NewCanvas` (wraps internal/render) |

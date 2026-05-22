@@ -119,6 +119,13 @@ type Window struct {
 	// as the mouse moves across the widget tree.
 	hoveredWidget widget.Widget
 
+	// capturedWidget receives all mouse events directly during drag
+	// operations, bypassing tree hit-testing (ADR-031 PointerCapturer).
+	// Set by CapturePointer, cleared by ReleasePointer or auto-released
+	// on MouseRelease when all buttons are up.
+	// Enterprise references: Win32 SetCapture, Qt grabMouse.
+	capturedWidget widget.Widget
+
 	// mouseButtonsHeld tracks pressed mouse buttons to prevent cursor
 	// reset during drag operations (Frame.ResetCursor skipped while dragging).
 	mouseButtonsHeld event.ButtonState
@@ -237,6 +244,18 @@ func newWindow(
 		}
 	})
 
+	// Wire pointer capture callbacks (ADR-031). Widgets call CapturePointer
+	// during drag start to receive mouse events directly, bypassing tree
+	// hit-testing. Auto-released on MouseRelease when all buttons are up.
+	ctx.SetOnCapturePointer(func(wgt widget.Widget) {
+		w.capturedWidget = wgt
+	})
+	ctx.SetOnReleasePointer(func(wgt widget.Widget) {
+		if w.capturedWidget == wgt {
+			w.capturedWidget = nil
+		}
+	})
+
 	// Wire dirty boundary registration so upward propagation populates the
 	// flat dirty boundary set. This replaces O(n) NeedsRedrawInTreeNonBoundary
 	// tree walks with O(1) HasDirtyBoundaries map lookup for frame skip.
@@ -300,6 +319,16 @@ func (w *Window) SetRoot(root widget.Widget) {
 	w.needsLayout = true
 	w.needsRedraw = true
 	w.needsFullRepaint = true
+
+	// Clear references to old tree widgets to prevent pinning the
+	// entire unmounted tree in memory via parent/children links.
+	w.hoveredWidget = nil
+	w.capturedWidget = nil
+
+	// Clear references to old tree widgets to prevent pinning the
+	// entire unmounted tree in memory via parent/children links.
+	w.hoveredWidget = nil
+	w.capturedWidget = nil
 
 	// Update focus manager with new root so Tab navigation
 	// traverses the correct widget tree.
@@ -366,6 +395,27 @@ func (w *Window) HandleEvent(e event.Event) {
 		if w.focusMgr.HandleKeyEvent(ke) {
 			w.syncManagerFocusToContext()
 			return
+		}
+	}
+
+	// ADR-031: Pointer capture — deliver mouse events directly to the
+	// captured widget, bypassing tree hit-testing. This enables drag
+	// operations (slider, splitview, scrollbar, text selection) to work
+	// when the mouse moves outside the widget's bounds.
+	// Auto-releases on MouseRelease when all buttons are up.
+	if me, ok := e.(*event.MouseEvent); ok && w.capturedWidget != nil {
+		switch me.MouseType {
+		case event.MouseMove, event.MouseRelease, event.MousePress:
+			consumed := w.capturedWidget.Event(w.ctx, me)
+			// Auto-release when all mouse buttons are up (drag ended).
+			if me.MouseType == event.MouseRelease && me.Buttons == 0 {
+				w.capturedWidget = nil
+			}
+			// Track mouse button state even during capture.
+			w.mouseButtonsHeld = me.Buttons
+			if consumed {
+				return
+			}
 		}
 	}
 
