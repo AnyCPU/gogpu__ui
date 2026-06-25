@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Radio group stale selection pixels** ([#145](https://github.com/gogpu/ui/issues/145)) — selecting a new radio button now invalidates both the newly-selected and previously-selected items. Previously only the clicked item was invalidated, causing the old "selected dot" to persist on damage-aware compositors (Wayland, Vulkan `VK_KHR_incremental_present`, DX12 `FLIP_SEQUENTIAL`). Also expanded invalidation rect to cover focus ring area (drawn 2px beyond item bounds).
 - **Inconsistent glyph weights in ListView** ([#148](https://github.com/gogpu/ui/issues/148)) — RepaintBoundary GPU textures were blitted at fractional pixel positions, causing the GPU's bilinear texture sampler to interpolate between texel rows differently per item. Snapped compositor blit coordinates to integer device pixels (Flutter `ComputeIntegralTransCTM` pattern). Also snapped clip rect coordinates for consistency.
+- **Collapsible content bleeding through after collapse** ([#147](https://github.com/gogpu/ui/issues/147)) — ListView items and spinner remained visible after collapsing a section. Root cause: `renderSingleBoundaryFromLayer` skipped `updateClipRect` for invisible boundaries, leaving stale viewport clips in the blit path. Now updates clip even when culling, so stale textures are clipped to zero.
 
 ### Dependencies
 

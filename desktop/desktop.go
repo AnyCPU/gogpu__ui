@@ -571,7 +571,14 @@ func (rl *renderLoop) renderSingleBoundaryFromLayer(pic *compositor.PictureLayer
 	}
 
 	// Skip non-visible boundaries (uninitialized origin or outside viewport).
+	// Update the entry's clip rect even when skipping, so the blit path uses
+	// the current (zero) clip instead of stale data from the last visible frame.
+	// Without this, collapsed Collapsible content bleeds through because the
+	// compositor blits stale textures with the old viewport clip (#147).
 	if !pic.IsRoot() && !isBoundaryLayerVisible(pic, bw, bh) {
+		if entry := rl.boundaryTextures[pic.BoundaryCacheKey()]; entry != nil {
+			rl.updateClipRect(entry, pic)
+		}
 		return
 	}
 
@@ -742,8 +749,12 @@ func (rl *renderLoop) compositeFromTreeRecursive(layer compositor.Layer, cc *gg.
 		return
 	}
 
-	// PictureLayer: blit its texture.
+	// PictureLayer: blit its texture (skip invisible boundaries).
 	if pic, ok := layer.(*compositor.PictureLayerImpl); ok {
+		bw, bh := pic.Size()
+		if !pic.IsRoot() && !isBoundaryLayerVisible(pic, bw, bh) {
+			return
+		}
 		rl.blitPictureLayer(pic, cc, parentOpacity)
 		return
 	}

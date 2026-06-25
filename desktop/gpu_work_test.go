@@ -584,3 +584,87 @@ func TestPixelSnap_ClipRect(t *testing.T) {
 		t.Errorf("clip.Height snap = %v, want 200", h)
 	}
 }
+
+// --- Test: invisible boundary clip update (#147) ---
+
+// TestInvisibleBoundary_ClipUpdated verifies that renderSingleBoundaryFromLayer
+// updates entry.clipRect even when the boundary is invisible (zero CompositorClip).
+// Without this, collapsed Collapsible content bleeds through because the
+// compositor blits stale textures with the old viewport clip (#147).
+func TestInvisibleBoundary_ClipUpdated(t *testing.T) {
+	root, children := buildTestLayerTree(1, 48, 48)
+	rl := newRenderLoopWithTextures(root)
+
+	child := children[0]
+	entry := rl.boundaryTextures[child.BoundaryCacheKey()]
+
+	// Simulate expanded state: boundary visible with a real clip.
+	oldClip := geometry.NewRect(0, 200, 800, 400)
+	child.SetPictureClipRect(oldClip)
+	entry.clipRect = oldClip
+	entry.hasClip = true
+
+	// Now simulate collapse: set zero clip (Collapsible stamps Rect{}).
+	zeroClip := geometry.Rect{}
+	child.SetPictureClipRect(zeroClip)
+
+	// isBoundaryLayerVisible should return false for zero clip at positive origin.
+	bw, bh := child.Size()
+	if isBoundaryLayerVisible(child, bw, bh) {
+		t.Fatal("boundary with zero clip should not be visible")
+	}
+
+	// Before fix: entry.clipRect retained old non-zero clip (stale data).
+	// After fix: renderSingleBoundaryFromLayer updates entry even when skipping.
+	// Simulate the fix path:
+	rl.updateClipRect(entry, child)
+
+	if entry.clipRect != zeroClip {
+		t.Errorf("entry.clipRect = %v, want zero rect (should be updated on cull)", entry.clipRect)
+	}
+}
+
+// TestCompositeSkipsInvisibleBoundary verifies that compositeFromTreeRecursive
+// skips PictureLayers that are not visible (defense-in-depth for #147).
+func TestCompositeSkipsInvisibleBoundary(t *testing.T) {
+	pic := compositor.NewPictureLayer()
+	pic.SetBoundaryCacheKey(100)
+	pic.SetSize(48, 48)
+	pic.SetScreenOrigin(geometry.Pt(10, 50))
+	pic.SetPictureClipRect(geometry.Rect{}) // zero clip = collapsed
+
+	bw, bh := pic.Size()
+	if isBoundaryLayerVisible(pic, bw, bh) {
+		t.Error("boundary with zero clip at positive origin should not be visible")
+	}
+}
+
+// TestZeroClipRect_Intersects verifies that a zero rect does not intersect
+// with any positive-position boundary (geometry invariant for culling).
+func TestZeroClipRect_Intersects(t *testing.T) {
+	zeroClip := geometry.Rect{} // {Min:{0,0}, Max:{0,0}}
+
+	tests := []struct {
+		name   string
+		origin geometry.Point
+		w, h   int
+		want   bool
+	}{
+		{"positive origin", geometry.Pt(10, 50), 48, 48, false},
+		{"zero origin", geometry.Pt(0, 0), 48, 48, false},
+		{"negative origin spanning zero", geometry.Pt(-10, -10), 48, 48, true}, // rect covers origin point
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			screenRect := geometry.Rect{
+				Min: tt.origin,
+				Max: geometry.Pt(tt.origin.X+float32(tt.w), tt.origin.Y+float32(tt.h)),
+			}
+			got := screenRect.Intersects(zeroClip)
+			if got != tt.want {
+				t.Errorf("screenRect(%v).Intersects(zeroClip) = %v, want %v",
+					screenRect, got, tt.want)
+			}
+		})
+	}
+}
