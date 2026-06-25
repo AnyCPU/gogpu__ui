@@ -5,22 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.36] — 2026-06-25
 
 ### Added
 
 - **Layout cache infrastructure** ([#143](https://github.com/gogpu/ui/pull/143), @TimLai666) — ADR-032 Phase 1: per-node constraint cache on WidgetBase, `widget.LayoutChild()` helper (symmetric with DrawChild), `MarkNeedsLayout()` with idempotency guard and upward propagation, `GOGPU_DEBUG_LAYOUT=1` debug verifier. Purely additive — mechanism is inert until containers adopt LayoutChild in Phase 2.
+- **Gallery: "Show Dialog" button** — dialog section now has an interactive trigger instead of empty inline widget. Click opens modal overlay with Cancel/Confirm actions.
 
 ### Fixed
 
 - **Radio group stale selection pixels** ([#145](https://github.com/gogpu/ui/issues/145)) — selecting a new radio button now invalidates both the newly-selected and previously-selected items. Previously only the clicked item was invalidated, causing the old "selected dot" to persist on damage-aware compositors (Wayland, Vulkan `VK_KHR_incremental_present`, DX12 `FLIP_SEQUENTIAL`). Also expanded invalidation rect to cover focus ring area (drawn 2px beyond item bounds).
 - **Inconsistent glyph weights in ListView** ([#148](https://github.com/gogpu/ui/issues/148)) — RepaintBoundary GPU textures were blitted at fractional pixel positions, causing the GPU's bilinear texture sampler to interpolate between texel rows differently per item. Snapped compositor blit coordinates to integer device pixels (Flutter `ComputeIntegralTransCTM` pattern). Also snapped clip rect coordinates for consistency.
-- **Collapsible content bleeding through after collapse** ([#147](https://github.com/gogpu/ui/issues/147)) — ListView items and spinner remained visible after collapsing a section. Root cause: `renderSingleBoundaryFromLayer` skipped `updateClipRect` for invisible boundaries, leaving stale viewport clips in the blit path. Now updates clip even when culling, so stale textures are clipped to zero.
+- **Collapsible content bleeding through after collapse** ([#147](https://github.com/gogpu/ui/issues/147)) — ListView items and spinner remained visible after collapsing a section. Two fixes: (1) `renderSingleBoundaryFromLayer` now updates `entry.clipRect` for invisible boundaries (stale clip prevention), (2) `compositeFromTreeRecursive` checks boundary visibility before blitting (defense-in-depth). Also added zero-area clip skip in `blitPictureLayer`.
+- **Spinner arc artifact** — 1px blue line at bottom of spinner caused by rounding mismatch between damage rect (`int()` truncation) and blit position (`math.Round()`). Aligned damage tracking to use `math.Round()` matching the blit path.
 
 ### Dependencies
 
-- gg v0.48.13 → v0.48.14
-- gogpu v0.42.1 → v0.42.5
+- gg v0.48.13 → v0.48.16
+- gogpu v0.42.1 → v0.42.6
+- wgpu v0.30.2 → v0.30.3
 
 ## [0.1.35] — 2026-06-21
 

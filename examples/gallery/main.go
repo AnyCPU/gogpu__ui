@@ -31,6 +31,8 @@ import (
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/ui/app"
 	"github.com/gogpu/ui/core/button"
+	"github.com/gogpu/ui/event"
+	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/core/checkbox"
 	"github.com/gogpu/ui/core/collapsible"
 	"github.com/gogpu/ui/core/datatable"
@@ -793,7 +795,7 @@ func buildContainersSection(ps painterSet) *collapsible.Widget {
 		collapsible.PainterOpt(ps.collapsible),
 	)
 
-	// Dialog (shown inline as a widget for demo, since dialogs are typically overlays).
+	// Dialog trigger: button opens a modal dialog overlay.
 	dlg := dialog.New(
 		dialog.Title("Confirm Action"),
 		dialog.Content(
@@ -806,11 +808,7 @@ func buildContainersSection(ps painterSet) *collapsible.Widget {
 		dialog.MaxWidth(400),
 		dialog.PainterOpt(ps.dialog),
 	)
-	dlgBox := primitives.Box(dlg).
-		Height(160).
-		Rounded(6).
-		Background(ps.cardBg()).
-		BorderStyle(1, ps.cardBorder())
+	dlgTrigger := newDialogTrigger(dlg, "Show Dialog", ps)
 
 	content := primitives.VBox(
 		sectionLabel("TabView (3 tabs)", ps),
@@ -820,7 +818,7 @@ func buildContainersSection(ps painterSet) *collapsible.Widget {
 		sectionLabel("Collapsible", ps),
 		nested,
 		sectionLabel("Dialog", ps),
-		dlgBox,
+		dlgTrigger,
 	).Gap(10).Padding(16).Background(ps.sectionBg()).Rounded(8)
 
 	return collapsible.New(
@@ -923,4 +921,53 @@ func smoothWalk(current, lo, hi, step float64) float64 {
 	delta += (mid - current) * 0.05
 	next := current + delta
 	return math.Max(lo, math.Min(hi, next))
+}
+
+// dialogTrigger wraps a button that opens a dialog on click.
+// Button.OnClick has no ctx parameter, so this widget captures ctx
+// from Event and forwards to dialog.Show.
+type dialogTrigger struct {
+	widget.WidgetBase
+	dlg    *dialog.Widget
+	btn    *button.Widget
+	label  string
+}
+
+func newDialogTrigger(dlg *dialog.Widget, label string, ps painterSet) *dialogTrigger {
+	dt := &dialogTrigger{dlg: dlg, label: label}
+	dt.btn = button.New(
+		button.Text(label),
+		button.VariantOpt(button.Outlined),
+		button.PainterOpt(ps.button),
+	)
+	dt.btn.SetParent(dt)
+	dt.SetVisible(true)
+	dt.SetEnabled(true)
+	return dt
+}
+
+func (dt *dialogTrigger) Layout(ctx widget.Context, c geometry.Constraints) geometry.Size {
+	return dt.btn.Layout(ctx, c)
+}
+
+func (dt *dialogTrigger) Draw(ctx widget.Context, canvas widget.Canvas) {
+	dt.btn.SetBounds(dt.Bounds())
+	widget.StampScreenOrigin(dt.btn, canvas)
+	dt.btn.Draw(ctx, canvas)
+}
+
+func (dt *dialogTrigger) Event(ctx widget.Context, e event.Event) bool {
+	if me, ok := e.(*event.MouseEvent); ok {
+		if me.MouseType == event.MouseRelease && me.Button == event.ButtonLeft {
+			if dt.Bounds().Contains(me.Position) && !dt.dlg.IsOpen() {
+				dt.dlg.Show(ctx)
+				return true
+			}
+		}
+	}
+	return dt.btn.Event(ctx, e)
+}
+
+func (dt *dialogTrigger) Children() []widget.Widget {
+	return []widget.Widget{dt.btn}
 }

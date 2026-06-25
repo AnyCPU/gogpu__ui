@@ -719,17 +719,21 @@ func (rl *renderLoop) trackBoundaryDamage(pic *compositor.PictureLayerImpl, bw, 
 			int(origin.X), int(origin.Y), int(origin.X)+bw, int(origin.Y)+bh)
 	}
 	// Logical coords for debug overlay.
+	// Use math.Round for origin to match blitPictureLayer (line 806).
+	// Without this, int() truncation can make the damage rect 1px smaller
+	// than the blit quad, leaving stale arc fragments under LoadOpLoad (#147).
+	rx := int(math.Round(float64(origin.X)))
+	ry := int(math.Round(float64(origin.Y)))
 	rl.boundaryDamageLogical = append(rl.boundaryDamageLogical, image.Rect(
-		int(origin.X), int(origin.Y),
-		int(origin.X)+bw, int(origin.Y)+bh,
+		rx, ry, rx+bw, ry+bh,
 	))
 	// Physical coords for GPU scissor.
 	scale := float64(rl.canvas.DeviceScale())
 	rl.frameDamageRects = append(rl.frameDamageRects, image.Rect(
-		int(float64(origin.X)*scale),
-		int(float64(origin.Y)*scale),
-		int(float64(origin.X)*scale)+int(float64(bw)*scale+0.5),
-		int(float64(origin.Y)*scale)+int(float64(bh)*scale+0.5),
+		int(float64(rx)*scale),
+		int(float64(ry)*scale),
+		int(float64(rx)*scale)+int(float64(bw)*scale+0.5),
+		int(float64(ry)*scale)+int(float64(bh)*scale+0.5),
 	))
 }
 
