@@ -31,8 +31,6 @@ import (
 	"github.com/gogpu/gogpu"
 	"github.com/gogpu/ui/app"
 	"github.com/gogpu/ui/core/button"
-	"github.com/gogpu/ui/event"
-	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/core/checkbox"
 	"github.com/gogpu/ui/core/collapsible"
 	"github.com/gogpu/ui/core/datatable"
@@ -51,10 +49,14 @@ import (
 	"github.com/gogpu/ui/core/toolbar"
 	"github.com/gogpu/ui/core/treeview"
 	"github.com/gogpu/ui/desktop"
+	"github.com/gogpu/ui/event"
+	"github.com/gogpu/ui/geometry"
 	"github.com/gogpu/ui/icon"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/theme"
+	"github.com/gogpu/ui/theme/cupertino"
 	"github.com/gogpu/ui/theme/devtools"
+	"github.com/gogpu/ui/theme/fluent"
 	"github.com/gogpu/ui/theme/material3"
 	"github.com/gogpu/ui/widget"
 )
@@ -143,6 +145,40 @@ func dtPainters(dt *devtools.Theme) painterSet {
 	}
 }
 
+// flPainters creates a painterSet from a Fluent theme.
+// Widgets without Fluent-specific painters use DefaultPainter (zero value).
+func flPainters(fl *fluent.Theme) painterSet {
+	return painterSet{
+		button:    fluent.ButtonPainter{Theme: fl},
+		checkbox:  fluent.CheckboxPainter{Theme: fl},
+		radio:     fluent.RadioPainter{Theme: fl},
+		textfield: fluent.TextFieldPainter{Theme: fl},
+		dropdown:  fluent.DropdownPainter{Theme: fl},
+		slider:    fluent.SliderPainter{Theme: fl},
+		dialog:    fluent.DialogPainter{Theme: fl},
+		scrollbar: fluent.ScrollbarPainter{Theme: fl},
+		tabview:   fluent.TabViewPainter{Theme: fl},
+		isDark:    fl.IsDark(),
+	}
+}
+
+// cupPainters creates a painterSet from a Cupertino theme.
+// Widgets without Cupertino-specific painters use DefaultPainter (zero value).
+func cupPainters(cup *cupertino.Theme) painterSet {
+	return painterSet{
+		button:    cupertino.ButtonPainter{Theme: cup},
+		checkbox:  cupertino.CheckboxPainter{Theme: cup},
+		radio:     cupertino.RadioPainter{Theme: cup},
+		textfield: cupertino.TextFieldPainter{Theme: cup},
+		dropdown:  cupertino.DropdownPainter{Theme: cup},
+		slider:    cupertino.SliderPainter{Theme: cup},
+		dialog:    cupertino.DialogPainter{Theme: cup},
+		scrollbar: cupertino.ScrollbarPainter{Theme: cup},
+		tabview:   cupertino.TabViewPainter{Theme: cup},
+		isDark:    cup.IsDark(),
+	}
+}
+
 // galleryState holds mutable state for the gallery demo.
 type galleryState struct {
 	chart       *linechart.Widget
@@ -155,6 +191,7 @@ type galleryState struct {
 var themeNames = []string{
 	"M3 Purple", "M3 Blue", "M3 Green", "M3 Orange",
 	"DevTools Dark", "DevTools Light",
+	"Fluent", "Cupertino",
 }
 
 func main() {
@@ -204,6 +241,10 @@ func switchTheme(idx int) painterSet {
 		return dtPainters(devtools.NewDarkTheme())
 	case idx == 5: //nolint:mnd // DevTools Light
 		return dtPainters(devtools.NewTheme())
+	case idx == 6: //nolint:mnd // Fluent
+		return flPainters(fluent.NewTheme())
+	case idx == 7: //nolint:mnd // Cupertino
+		return cupPainters(cupertino.NewTheme())
 	default:
 		return m3Painters(material3.New(widget.Hex(0x6750A4)))
 	}
@@ -220,6 +261,10 @@ func switchUITheme(idx int) *theme.Theme {
 		return devtools.NewDarkTheme().AsTheme()
 	case idx == 5: //nolint:mnd // DevTools Light
 		return devtools.NewTheme().AsTheme()
+	case idx == 6: //nolint:mnd // Fluent
+		return fluent.NewTheme().AsTheme()
+	case idx == 7: //nolint:mnd // Cupertino
+		return material3.New(widget.Hex(0x007AFF)).AsTheme() // Apple blue as base
 	default:
 		return material3.New(widget.Hex(0x6750A4)).AsTheme()
 	}
@@ -928,9 +973,9 @@ func smoothWalk(current, lo, hi, step float64) float64 {
 // from Event and forwards to dialog.Show.
 type dialogTrigger struct {
 	widget.WidgetBase
-	dlg    *dialog.Widget
-	btn    *button.Widget
-	label  string
+	dlg   *dialog.Widget
+	btn   *button.Widget
+	label string
 }
 
 func newDialogTrigger(dlg *dialog.Widget, label string, ps painterSet) *dialogTrigger {
