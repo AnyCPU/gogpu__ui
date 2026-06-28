@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.38] — 2026-06-28
+
+### Added
+
+- **Layout invalidation wiring** ([#151](https://github.com/gogpu/ui/pull/151), @TimLai666) — ADR-032 Phase 2a: `BindToSchedulerLayout` + `BindToSchedulerLayoutFunc` for layout-affecting signals, `MarkNeedsLayout()` in 9 event handlers, `MarkLayoutCleanRecursive` post-layout shim. 11 signal bindings converted (button/text, checkbox/label, chip/label, badge/count, collapsible/expanded, treeview/root, listview/itemCount, gridview/itemCount+columns, datatable/rowCount, splitview/ratio). Invalidation infrastructure ready — cache activation (LayoutChild) in Phase 2b.
+
 ## [0.1.37] — 2026-06-27
 
 ### Added
