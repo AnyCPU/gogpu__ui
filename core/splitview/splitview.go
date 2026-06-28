@@ -464,7 +464,7 @@ func (w *Widget) handleMouseMove(ctx widget.Context, me *event.MouseEvent) bool 
 			return false
 		}
 
-		w.updateRatioFromDrag(ctx, me.Position)
+		w.updateRatioFromDrag(me.Position)
 		w.updateCursor(ctx) // Maintain drag cursor on every move
 		return true
 	}
@@ -497,7 +497,7 @@ func (w *Widget) handleMousePress(ctx widget.Context, me *event.MouseEvent) bool
 	if w.cfg.collapsible {
 		now := ctx.Now()
 		if now.Sub(w.lastClickAt) < doubleClickThreshold && w.isNearLastClick(me.Position) {
-			w.toggleCollapse(ctx)
+			w.toggleCollapse()
 			w.lastClickAt = time.Time{} // Reset to prevent triple-click.
 			return true
 		}
@@ -549,21 +549,21 @@ func (w *Widget) isNearLastClick(p geometry.Point) bool {
 }
 
 // toggleCollapse toggles the collapsed state of the first panel.
-func (w *Widget) toggleCollapse(ctx widget.Context) {
+func (w *Widget) toggleCollapse() {
 	if w.collapsed {
 		// Restore previous ratio.
 		w.collapsed = false
-		w.setRatio(ctx, w.preCollapse)
+		w.setRatio(w.preCollapse)
 	} else {
 		// Collapse first panel.
 		w.preCollapse = w.effectiveRatio()
 		w.collapsed = true
-		w.setRatio(ctx, 0)
+		w.setRatio(0)
 	}
 }
 
 // updateRatioFromDrag calculates the new ratio based on drag position.
-func (w *Widget) updateRatioFromDrag(ctx widget.Context, pos geometry.Point) {
+func (w *Widget) updateRatioFromDrag(pos geometry.Point) {
 	bounds := w.Bounds()
 	divW := w.cfg.resolvedDividerWidth()
 
@@ -590,7 +590,7 @@ func (w *Widget) updateRatioFromDrag(ctx widget.Context, pos geometry.Point) {
 		w.collapsed = false
 	}
 
-	w.setRatio(ctx, newRatio)
+	w.setRatio(newRatio)
 }
 
 // clampRatioToConstraints applies min panel constraints to the ratio.
@@ -622,7 +622,7 @@ func (w *Widget) clampRatioToConstraints(ratio, totalSpace float32) float32 {
 
 // setRatio updates the split ratio, writes to signal if bound, and fires callback.
 // If fixedFirst is active, the pixel size is updated from the new ratio.
-func (w *Widget) setRatio(ctx widget.Context, ratio float32) {
+func (w *Widget) setRatio(ratio float32) {
 	ratio = clampRatio(ratio)
 	current := w.cfg.ResolvedRatio()
 
@@ -654,9 +654,8 @@ func (w *Widget) setRatio(ctx widget.Context, ratio float32) {
 		w.cfg.onRatioChange(ratio)
 	}
 
-	w.SetNeedsRedraw(true)
-	// ADR-028: layout change — ratio change resizes child panels.
-	ctx.Invalidate()
+	// ADR-032: layout change — ratio change resizes child panels.
+	w.MarkNeedsLayout()
 }
 
 // effectiveRatio returns the current ratio, accounting for collapsed state.
@@ -734,10 +733,10 @@ func (w *Widget) Mount(ctx widget.Context) {
 		return
 	}
 	if w.cfg.readonlyRatioSignal != nil {
-		b := state.BindToScheduler(w.cfg.readonlyRatioSignal, w, sched)
+		b := state.BindToSchedulerLayout(w.cfg.readonlyRatioSignal, w, sched)
 		w.AddBinding(b)
 	} else if w.cfg.ratioSignal != nil {
-		b := state.BindToScheduler(w.cfg.ratioSignal, w, sched)
+		b := state.BindToSchedulerLayout(w.cfg.ratioSignal, w, sched)
 		w.AddBinding(b)
 	}
 }
