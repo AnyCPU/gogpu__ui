@@ -838,6 +838,42 @@ func (w *Window) draw() {
 	widget.ClearRedrawInTree(w.root)
 }
 
+// Close performs teardown of the window's widget trees and animation state.
+//
+// This stops the animation pumper goroutine, unmounts all overlay trees,
+// and unmounts the root widget tree. After Close, the window should not
+// be used for rendering.
+//
+// Close is idempotent — calling it multiple times is safe.
+func (w *Window) Close() {
+	// Stop animation pumper goroutine.
+	if w.animToken != nil {
+		w.animToken.Stop()
+		w.animToken = nil
+	}
+
+	// Unmount all overlay widget trees.
+	if w.overlays != nil {
+		for _, o := range w.overlays.List() {
+			widget.UnmountTree(o)
+		}
+		// Pop all overlays (Stack has no Clear method).
+		for w.overlays.Len() > 0 {
+			w.overlays.Pop()
+		}
+	}
+
+	// Unmount root widget tree.
+	if w.root != nil {
+		widget.UnmountTree(w.root)
+		w.root = nil
+	}
+
+	// Clear references to prevent pinning unmounted widgets.
+	w.hoveredWidget = nil
+	w.capturedWidget = nil
+}
+
 // RenderMode returns the window's current rendering mode.
 func (w *Window) RenderMode() RenderMode {
 	return w.renderMode
@@ -1120,21 +1156,42 @@ func (m *windowOverlayManager) PushOverlay(w widget.Widget, onDismiss func()) {
 		}),
 	)
 	m.window.overlays.Push(container)
+
+	// Mount the overlay container tree so signal bindings activate (#171).
+	widget.MountTree(container, m.window.ctx)
 }
 
-// PopOverlay removes the topmost overlay.
+// PopOverlay removes the topmost overlay and unmounts its widget tree.
 func (m *windowOverlayManager) PopOverlay() {
-	m.window.overlays.Pop()
+	top := m.window.overlays.Pop()
+	if top != nil {
+		widget.UnmountTree(top)
+	}
 }
 
 // RemoveOverlay finds and removes the overlay containing the given widget.
+// All overlays above the target are also unmounted (stack semantics).
 func (m *windowOverlayManager) RemoveOverlay(w widget.Widget) {
 	for _, o := range m.window.overlays.List() {
 		if c, ok := o.(*overlay.Container); ok {
 			if c.Content() == w {
+				// overlay.Stack.Remove pops everything above 'o' too.
+				// Unmount all overlays at and above the target.
+				m.unmountOverlaysAbove(o)
 				m.window.overlays.Remove(o)
 				return
 			}
+		}
+	}
+}
+
+// unmountOverlaysAbove unmounts the given overlay and all overlays above it.
+func (m *windowOverlayManager) unmountOverlaysAbove(target overlay.Overlay) {
+	list := m.window.overlays.List()
+	for i := len(list) - 1; i >= 0; i-- {
+		widget.UnmountTree(list[i])
+		if list[i] == target {
+			return
 		}
 	}
 }
